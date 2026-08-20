@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+<title>TAGLYZ Portfolio</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:#f9f9f7; --surface-1:#fcfcfb;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100;
+    --pos:#2a78d6; --negb:#d03b3b;
+    --good:#006300; --critical:#d03b3b; --warning:#fab219;
+    --hover:rgba(11,11,11,0.04);
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface-1:#1a1a19;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+    --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
+    --pos:#3987e5; --negb:#d03b3b;
+    --good:#0ca30c; --critical:#d03b3b; --warning:#fab219;
+    --hover:rgba(255,255,255,0.06);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--page); color:var(--text-primary);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1180px; margin:0 auto; padding:28px 24px 64px; }
+  [hidden] { display:none !important; }
+
+  /* ---------- lock screen ---------- */
+  #lock { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .lockcard { background:var(--surface-1); border:1px solid var(--border); border-radius:16px;
+    padding:34px 32px; width:100%; max-width:420px; }
+  .lockcard h1 { font-size:19px; margin:0 0 6px; font-weight:640; letter-spacing:-0.01em; }
+  .lockcard p { color:var(--text-secondary); font-size:13px; margin:0 0 20px; }
+  .lockcard label { display:block; font-size:12.5px; color:var(--text-secondary); margin-bottom:6px; }
+  .lockcard input { width:100%; padding:11px 13px; font:inherit; border-radius:10px;
+    border:1px solid var(--axis); background:var(--page); color:var(--text-primary); }
+  .lockcard input:focus { outline:2px solid var(--series-1); outline-offset:1px; border-color:transparent; }
+  .lockcard button { margin-top:14px; width:100%; padding:11px; font:inherit; font-weight:600;
+    border:0; border-radius:10px; background:var(--series-1); color:#fff; cursor:pointer; }
+  .lockcard button:disabled { opacity:.55; cursor:default; }
+  .err { color:var(--critical); font-size:12.5px; margin-top:12px; min-height:18px; }
+
+  /* ---------- chrome ---------- */
+  header.top { display:flex; align-items:flex-start; justify-content:space-between; gap:20px;
+    flex-wrap:wrap; margin-bottom:22px; }
+  h1.title { font-size:22px; font-weight:650; margin:0 0 4px; letter-spacing:-0.01em; }
+  .sub { color:var(--text-secondary); font-size:13px; margin:0; }
+  .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  select, .toggle { background:var(--surface-1); border:1px solid var(--border); color:var(--text-secondary);
+    border-radius:999px; padding:8px 14px; font:inherit; font-size:12.5px; cursor:pointer; }
+  select { border-radius:10px; }
+  .toggle:hover, select:hover { color:var(--text-primary); }
+
+  .hero { background:var(--surface-1); border:1px solid var(--border); border-radius:14px;
+    padding:24px 26px; margin-bottom:16px; display:flex; align-items:flex-end; gap:40px; flex-wrap:wrap; }
+  .hero .label { color:var(--text-secondary); font-size:13px; }
+  .hero .value { font-size:52px; font-weight:640; letter-spacing:-0.025em; line-height:1.05; margin-top:2px; }
+  .hero .heronote { color:var(--text-muted); font-size:12.5px; margin-top:6px; }
+  .hero-side { display:flex; gap:34px; flex-wrap:wrap; padding-bottom:6px; }
+  .hero-side .l { color:var(--text-secondary); font-size:12.5px; }
+  .hero-side .v { font-size:20px; font-weight:600; letter-spacing:-0.01em; margin-top:2px; }
+
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:22px; }
+  .tile { background:var(--surface-1); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+  .tile .l { color:var(--text-secondary); font-size:12.5px; }
+  .tile .v { font-size:25px; font-weight:620; letter-spacing:-0.02em; margin-top:3px; }
+  .tile .d { font-size:12px; color:var(--text-muted); margin-top:3px; }
+  .pos { color:var(--good); } .neg { color:var(--critical); }
+
+  .card { background:var(--surface-1); border:1px solid var(--border); border-radius:14px;
+    padding:22px 24px 18px; margin-bottom:16px; }
+  .card h2 { font-size:15px; font-weight:620; margin:0 0 3px; }
+  .card .cap { color:var(--text-secondary); font-size:12.5px; margin:0 0 16px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:880px){ .grid2{grid-template-columns:1fr;} .hero .value{font-size:42px;} }
+
+  .legend { display:flex; gap:18px; flex-wrap:wrap; margin:0 0 10px; }
+  .legend span { display:inline-flex; align-items:center; gap:7px; color:var(--text-secondary);
+    font-size:12.5px; white-space:nowrap; }
+  .key { width:11px; height:11px; border-radius:3px; display:inline-block; flex:none; }
+  .key.line { height:3px; width:15px; border-radius:2px; }
+
+  svg { display:block; width:100%; overflow:visible; }
+  .tick { fill:var(--text-muted); font-size:11px; font-variant-numeric:tabular-nums; }
+  .xlab { fill:var(--text-secondary); font-size:11.5px; }
+  .dlab { fill:var(--text-primary); font-size:11.5px; font-weight:600; }
+  .gridline { stroke:var(--grid); stroke-width:1; }
+  .baseline { stroke:var(--axis); stroke-width:1; }
+  .rowhit { fill:transparent; cursor:pointer; }
+  .rowhit:hover { fill:var(--hover); }
+
+  .tip { position:fixed; pointer-events:none; z-index:40; opacity:0; transition:opacity .1s;
+    background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:9px 11px;
+    font-size:12.5px; box-shadow:0 6px 20px rgba(0,0,0,.14); min-width:158px; }
+  .tip .t { font-weight:620; margin-bottom:5px; }
+  .tip .r { display:flex; align-items:center; gap:10px; justify-content:space-between; color:var(--text-secondary); }
+  .tip .r b { color:var(--text-primary); font-weight:600; font-variant-numeric:tabular-nums; }
+  .tip .r .nm { display:inline-flex; align-items:center; gap:6px; }
+
+  details.tablewrap { background:var(--surface-1); border:1px solid var(--border);
+    border-radius:14px; padding:18px 24px; margin-bottom:16px; }
+  details.tablewrap summary { cursor:pointer; font-weight:600; font-size:14px; }
+  .scroller { overflow-x:auto; margin-top:14px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; font-variant-numeric:tabular-nums; }
+  th,td { padding:7px 10px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--grid); }
+  th:first-child, td:first-child { text-align:left; font-variant-numeric:normal;
+    position:sticky; left:0; background:var(--surface-1); }
+  thead th { color:var(--text-secondary); font-weight:600; border-bottom:1px solid var(--axis); }
+  tr.section td { color:var(--text-secondary); font-weight:600; padding-top:14px; }
+  tr.total td { font-weight:640; border-top:1px solid var(--axis); }
+  td.indent { padding-left:24px; color:var(--text-secondary); }
+  tbody tr.clickable { cursor:pointer; }
+  tbody tr.clickable:hover td { background:var(--hover); }
+
+  .note { background:var(--surface-1); border:1px solid var(--border);
+    border-left:3px solid var(--warning); border-radius:10px; padding:14px 18px;
+    font-size:12.5px; color:var(--text-secondary); margin-bottom:16px; }
+  .note b { color:var(--text-primary); }
+  footer { color:var(--text-muted); font-size:12px; margin-top:22px; }
+</style>
+</head>
+<body>
+
+<div id="lock">
+  <form class="lockcard" id="lockform">
+    <h1>TAGLYZ Portfolio</h1>
+    <p>This report is encrypted. Enter the passphrase to view it.</p>
+    <label for="pw">Passphrase</label>
+    <input type="password" id="pw" autocomplete="current-password" autofocus>
+    <button type="submit" id="unlock">Unlock</button>
+    <div class="err" id="err"></div>
+  </form>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header class="top">
+    <div>
+      <h1 class="title" id="viewTitle">Portfolio</h1>
+      <p class="sub" id="viewSub"></p>
+    </div>
+    <div class="controls">
+      <select id="propSel" aria-label="Choose a view"></select>
+      <button class="toggle" id="themeBtn" type="button">Dark mode</button>
+    </div>
+  </header>
+  <div id="body"></div>
+  <footer id="foot"></footer>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+"use strict";
+const BLOB = "__PAYLOAD__";
+const META = __META__;
+
+/* ============================ decryption ============================ */
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+async function decrypt(pass) {
+  const raw = b64(BLOB);
+  const salt = raw.slice(0, 16), iv = raw.slice(16, 28), body = raw.slice(28);
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass),
+    "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: META.iterations, hash: "SHA-256" },
+    base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, body);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+const form = document.getElementById("lockform");
+form.addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = document.getElementById("unlock"), err = document.getElementById("err");
+  btn.disabled = true; btn.textContent = "Decrypting…"; err.textContent = "";
+  try {
+    P = await decrypt(document.getElementById("pw").value);
+    document.getElementById("lock").hidden = true;
+    document.getElementById("app").hidden = false;
+    boot();
+  } catch (_) {
+    err.textContent = "That passphrase didn't work.";
+    btn.disabled = false; btn.textContent = "Unlock";
+    document.getElementById("pw").select();
+  }
+});
+
+/* ============================ helpers ============================ */
+let P = null;
+const NS = "http://www.w3.org/2000/svg";
+const sum = a => a.reduce((x, y) => x + y, 0);
+const money = v => (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 });
+const money2 = v => (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const compact = v => {
+  if (Math.abs(v) < 1000) return money(v);
+  const k = (Math.abs(v) / 1000).toFixed(Math.abs(v) < 10000 ? 1 : 0).replace(/\.0$/, "");
+  return (v < 0 ? "-$" : "$") + k + "k";
+};
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function niceTicks(max, maxTicks) {
+  if (max <= 0) return [0, 1];
+  const mag = Math.pow(10, Math.floor(Math.log10(max)) - 1);
+  let step = mag;
+  for (const s of [1, 2, 2.5, 5, 10, 20, 25, 50, 100, 200, 250, 500]) {
+    step = s * mag;
+    if (Math.ceil(max / step) + 1 <= maxTicks) break;
+  }
+  const out = []; let v = 0;
+  while (v < max - 1e-9) { out.push(v); v += step; }
+  out.push(v);
+  return out;
+}
+function colPath(x, y, w, h, r) {
+  r = Math.min(r, w / 2, Math.max(h, 0));
+  if (h <= 0.5) return `M${x} ${y + h} h${w}`;
+  return `M${x} ${y + h} V${y + r} a${r} ${r} 0 0 1 ${r} ${-r} h${w - 2 * r} a${r} ${r} 0 0 1 ${r} ${r} V${y + h} Z`;
+}
+
+const tip = document.getElementById("tip");
+function showTip(html, evt) {
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = evt.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = evt.clientY - r.height - pad;
+  tip.style.left = x + "px"; tip.style.top = Math.max(8, y) + "px";
+}
+const hideTip = () => { tip.style.opacity = 0; };
+const tipRow = (c, n, v) => `<div class="r"><span class="nm"><i class="key" style="background:${c}"></i>${n}</span><b>${v}</b></div>`;
+function attachTip(node, build) {
+  node.addEventListener("mousemove", e => showTip(build(), e));
+  node.addEventListener("mouseleave", hideTip);
+  node.addEventListener("focus", () => {
+    const b = node.getBoundingClientRect();
+    showTip(build(), { clientX: b.left + b.width / 2, clientY: b.top });
+  });
+  node.addEventListener("blur", hideTip);
+  node.setAttribute("tabindex", "0");
+}
+
+/* ============================ data shaping ============================ */
+const GROUP_OF = {};
+function initGroups() {
+  for (const g in P.groups) for (const lab of P.groups[g]) GROUP_OF[lab] = g;
+}
+const GROUP_NAMES = ["Taxes & insurance", "Repairs & handyman", "Utilities", "Management & admin"];
+const GROUP_VAR = ["--series-1", "--series-2", "--series-3", "--series-4"];
+
+/* A "series" is the shape every chart consumes, for one property or the whole portfolio. */
+function seriesFor(name) {
+  const n = P.months.length;
+  const zeros = () => new Array(n).fill(0);
+  const s = {
+    name, months: P.months,
+    income: zeros(), expenses: zeros(), expensesRecorded: zeros(),
+    noi: zeros(), debt: zeros(), capex: zeros(), cashflow: zeros(), variance: zeros(),
+    rent: zeros(), lines: {}, groups: {}
+  };
+  GROUP_NAMES.forEach(g => s.groups[g] = zeros());
+  const list = name === "__ALL__" ? Object.keys(P.properties) : [name];
+  for (const prop of list) {
+    const months = P.properties[prop];
+    for (let i = 0; i < n; i++) {
+      const m = months[i];
+      s.income[i] += m.totalIncome; s.expenses[i] += m.totalExpenses;
+      s.expensesRecorded[i] += m.totalExpensesRecorded;
+      s.noi[i] += m.noi; s.debt[i] += m.debt; s.capex[i] += m.capex;
+      s.cashflow[i] += m.cashflow; s.variance[i] += m.variance;
+      s.rent[i] += (m.income["Rental Income"] || 0);
+      for (const lab in m.expenses) {
+        (s.lines[lab] = s.lines[lab] || zeros())[i] += m.expenses[lab];
+        const g = GROUP_OF[lab.toLowerCase()];
+        if (g) s.groups[g][i] += m.expenses[lab];
+      }
+      for (const lab in m.income) (s.lines["+" + lab] = s.lines["+" + lab] || zeros())[i] += m.income[lab];
+    }
+  }
+  s.ytd = k => Math.round(sum(s[k]) * 100) / 100;
+  return s;
+}
+
+/* ============================ charts ============================ */
+function chartIncomeExpense(svg, s) {
+  svg.innerHTML = "";
+  const W = 520, H = 300, m = { t: 14, r: 14, b: 34, l: 56 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const ticks = niceTicks(Math.max(...s.income, ...s.expenses), 8), top = ticks[ticks.length - 1];
+  const y = v => m.t + ph - (v / top) * ph;
+  ticks.forEach(t => {
+    el("line", { x1: m.l, x2: m.l + pw, y1: y(t), y2: y(t), class: t === 0 ? "baseline" : "gridline" }, svg);
+    el("text", { x: m.l - 9, y: y(t) + 4, class: "tick", "text-anchor": "end" }, svg).textContent = compact(t);
+  });
+  const band = pw / s.months.length, gap = 2, bw = Math.min(24, (band - 16 - gap) / 2);
+  s.months.forEach((mo, i) => {
+    const cx = m.l + band * i + band / 2, x0 = cx - bw - gap / 2;
+    [["income", "--series-1", x0], ["expenses", "--series-2", x0 + bw + gap]].forEach(([k, cv, x]) => {
+      const v = s[k][i];
+      const p = el("path", { d: colPath(x, y(v), bw, (v / top) * ph, 4), fill: cssv(cv) }, svg);
+      attachTip(p, () => `<div class="t">${mo}</div>`
+        + tipRow(cssv("--series-1"), "Income", money2(s.income[i]))
+        + tipRow(cssv("--series-2"), "Expenses", money2(s.expenses[i]))
+        + tipRow("transparent", "NOI", money2(s.noi[i])));
+    });
+    el("text", { x: cx, y: H - m.b + 18, class: "xlab", "text-anchor": "middle" }, svg).textContent = mo;
+  });
+}
+
+function chartNoiCash(svg, s) {
+  svg.innerHTML = "";
+  const W = 520, H = 300, m = { t: 20, r: 58, b: 34, l: 58 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const all = s.noi.concat(s.cashflow);
+  const lo = Math.min(0, ...all), hi = Math.max(0, ...all);
+  const span = hi - lo || 1;
+  const step = niceTicks(span, 6)[1] || 1;
+  const tlo = Math.floor(lo / step) * step, thi = Math.ceil(hi / step) * step;
+  const ticks = []; for (let v = tlo; v <= thi + step * 0.001; v += step) ticks.push(v);
+  const y = v => m.t + ph - ((v - tlo) / (thi - tlo)) * ph;
+  const x = i => m.l + (pw / (s.months.length - 1)) * i;
+  ticks.forEach(t => {
+    el("line", { x1: m.l, x2: m.l + pw, y1: y(t), y2: y(t), class: Math.abs(t) < 1e-9 ? "baseline" : "gridline" }, svg);
+    el("text", { x: m.l - 9, y: y(t) + 4, class: "tick", "text-anchor": "end" }, svg).textContent = compact(t);
+  });
+  s.months.forEach((mo, i) => el("text", { x: x(i), y: H - m.b + 18, class: "xlab", "text-anchor": "middle" }, svg).textContent = mo);
+  const ser = [["noi", "--series-1"], ["cashflow", "--series-2"]];
+  ser.forEach(([k, cv]) => {
+    const d = s[k].map((v, i) => (i ? "L" : "M") + x(i) + " " + y(v)).join(" ");
+    el("path", { d, fill: "none", stroke: cssv(cv), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+  });
+  ser.forEach(([k, cv]) => s[k].forEach((v, i) =>
+    el("circle", { cx: x(i), cy: y(v), r: 4, fill: cssv(cv), stroke: cssv("--surface-1"), "stroke-width": 2 }, svg)));
+  const last = s.months.length - 1;
+  el("text", { x: x(last) + 10, y: y(s.noi[last]) + 4, class: "dlab" }, svg).textContent = compact(s.noi[last]);
+  el("text", { x: x(last) + 10, y: y(s.cashflow[last]) + 4, class: "dlab" }, svg).textContent = compact(s.cashflow[last]);
+  s.months.forEach((mo, i) => {
+    const bw = pw / (s.months.length - 1);
+    const hit = el("rect", { x: Math.max(m.l - 4, x(i) - bw / 2), y: m.t - 10, width: bw, height: ph + 20, fill: "transparent", style: "cursor:crosshair" }, svg);
+    let line = null;
+    hit.addEventListener("mouseenter", () => { line = el("line", { x1: x(i), x2: x(i), y1: m.t - 6, y2: m.t + ph, stroke: cssv("--axis"), "stroke-width": 1 }, svg); });
+    hit.addEventListener("mouseleave", () => { if (line) { line.remove(); line = null; } });
+    attachTip(hit, () => `<div class="t">${mo}</div>`
+      + tipRow(cssv("--series-1"), "NOI", money2(s.noi[i]))
+      + tipRow(cssv("--series-2"), "Cash flow", money2(s.cashflow[i]))
+      + tipRow("transparent", "Debt service", money2(s.debt[i])));
+  });
+}
+
+function chartExpenseBars(svg, s) {
+  svg.innerHTML = "";
+  const cats = Object.keys(s.lines).filter(k => k[0] !== "+")
+    .map(k => [k, sum(s.lines[k])]).filter(d => d[1] > 0).sort((a, b) => b[1] - a[1]);
+  const W = 1040, m = { t: 8, r: 120, b: 8, l: 200 }, rowH = 28;
+  const H = m.t + cats.length * rowH + m.b;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const pw = W - m.l - m.r, max = cats[0] ? cats[0][1] : 1, c = cssv("--series-1");
+  const total = sum(cats.map(d => d[1]));
+  el("line", { x1: m.l, x2: m.l, y1: m.t, y2: H - m.b, class: "baseline" }, svg);
+  cats.forEach(([name, val], i) => {
+    const yTop = m.t + i * rowH, bh = 15, by = yTop + (rowH - bh) / 2, w = (val / max) * pw;
+    el("text", { x: m.l - 12, y: by + bh / 2 + 4, class: "xlab", "text-anchor": "end" }, svg).textContent = name;
+    const r = Math.min(4, w / 2);
+    const d = w <= 0.5 ? `M${m.l} ${by} v${bh}` :
+      `M${m.l} ${by} H${m.l + w - r} a${r} ${r} 0 0 1 ${r} ${r} v${bh - 2 * r} a${r} ${r} 0 0 1 ${-r} ${r} H${m.l} Z`;
+    el("path", { d, fill: c }, svg);
+    el("text", { x: m.l + w + 10, y: by + bh / 2 + 4, class: "dlab" }, svg).textContent = money(val);
+    const hit = el("rect", { x: m.l, y: yTop, width: pw + m.r, height: rowH, fill: "transparent" }, svg);
+    attachTip(hit, () => `<div class="t">${name}</div>`
+      + tipRow(c, "YTD total", money2(val))
+      + tipRow("transparent", "Share", (val / total * 100).toFixed(1) + "%")
+      + tipRow("transparent", "Per month", money2(val / s.months.length)));
+  });
+}
+
+function chartExpenseMix(svg, s) {
+  svg.innerHTML = "";
+  const W = 1040, H = 320, m = { t: 16, r: 16, b: 36, l: 72 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const totals = s.months.map((_, i) => sum(GROUP_NAMES.map(g => s.groups[g][i])));
+  const ticks = niceTicks(Math.max(...totals), 8), top = ticks[ticks.length - 1];
+  const y = v => m.t + ph - (v / top) * ph;
+  ticks.forEach(t => {
+    el("line", { x1: m.l, x2: m.l + pw, y1: y(t), y2: y(t), class: t === 0 ? "baseline" : "gridline" }, svg);
+    el("text", { x: m.l - 10, y: y(t) + 4, class: "tick", "text-anchor": "end" }, svg).textContent = compact(t);
+  });
+  const band = pw / s.months.length, bw = Math.min(24, band * 0.34);
+  s.months.forEach((mo, i) => {
+    const cx = m.l + band * i + band / 2, x = cx - bw / 2;
+    let acc = 0;
+    GROUP_NAMES.forEach((g, gi) => {
+      const v = s.groups[g][i];
+      if (v <= 0) return;
+      const yTop = y(acc + v), yBot = y(acc);
+      const h = Math.max(0, yBot - yTop - (acc > 0 ? 2 : 0));
+      const d = gi === GROUP_NAMES.length - 1 ? colPath(x, yTop, bw, h, 4) : `M${x} ${yTop} h${bw} v${h} h${-bw} Z`;
+      el("path", { d, fill: cssv(GROUP_VAR[gi]) }, svg);
+      acc += v;
+    });
+    el("text", { x: cx, y: H - m.b + 18, class: "xlab", "text-anchor": "middle" }, svg).textContent = mo;
+    const hit = el("rect", { x: m.l + band * i, y: m.t, width: band, height: ph, fill: "transparent" }, svg);
+    attachTip(hit, () => `<div class="t">${mo}</div>`
+      + GROUP_NAMES.map((g, gi) => tipRow(cssv(GROUP_VAR[gi]), g, money2(s.groups[g][i]))).join("")
+      + tipRow("transparent", "Total", money2(totals[i])));
+  });
+}
+
+/* Diverging horizontal bars: YTD cash flow after debt, by property. */
+function chartRanking(svg, rows, onPick) {
+  svg.innerHTML = "";
+  const W = 1040, m = { t: 8, r: 24, b: 8, l: 176 }, rowH = 30;
+  const H = m.t + rows.length * rowH + m.b;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  // Value labels sit outside the bar ends, so reserve a gutter on each side wide
+  // enough for the longest one. Without it the largest negative bar runs its
+  // label straight into the property-name column.
+  const maxAbs = Math.max(...rows.map(r => Math.abs(r.value))) || 1;
+  const gutter = Math.max(56, money(-maxAbs).length * 7.2);
+  const barLeft = m.l + gutter, barRight = W - m.r - gutter;
+  const half = (barRight - barLeft) / 2, zero = barLeft + half;
+  const posC = cssv("--pos"), negC = cssv("--negb");
+  rows.forEach((r, i) => {
+    const yTop = m.t + i * rowH, bh = 15, by = yTop + (rowH - bh) / 2;
+    const w = Math.abs(r.value) / maxAbs * half;
+    const positive = r.value >= 0;
+    const x = positive ? zero : zero - w;
+    const rad = Math.min(4, w / 2);
+    const hit = el("rect", { x: 0, y: yTop, width: W, height: rowH, class: "rowhit" }, svg);
+    el("text", { x: m.l - 14, y: by + bh / 2 + 4, class: "xlab", "text-anchor": "end" }, svg).textContent = r.name;
+    if (w > 0.5) {
+      const d = positive
+        ? `M${x} ${by} H${x + w - rad} a${rad} ${rad} 0 0 1 ${rad} ${rad} v${bh - 2 * rad} a${rad} ${rad} 0 0 1 ${-rad} ${rad} H${x} Z`
+        : `M${x + w} ${by} H${x + rad} a${rad} ${rad} 0 0 0 ${-rad} ${rad} v${bh - 2 * rad} a${rad} ${rad} 0 0 0 ${rad} ${rad} H${x + w} Z`;
+      el("path", { d, fill: positive ? posC : negC }, svg);
+    }
+    el("text", {
+      x: positive ? x + w + 9 : x - 9, y: by + bh / 2 + 4, class: "dlab",
+      "text-anchor": positive ? "start" : "end"
+    }, svg).textContent = money(r.value);
+    attachTip(hit, () => `<div class="t">${r.name}</div>`
+      + tipRow(positive ? posC : negC, "Cash flow YTD", money2(r.value))
+      + tipRow("transparent", "NOI", money2(r.noi))
+      + tipRow("transparent", "Debt service", money2(r.debt))
+      + tipRow("transparent", "NOI margin", r.margin)
+      + `<div class="r" style="margin-top:5px"><span class="nm">Click to open</span></div>`);
+    hit.addEventListener("click", () => onPick(r.name));
+    hit.addEventListener("keydown", e => { if (e.key === "Enter") onPick(r.name); });
+  });
+  el("line", { x1: zero, x2: zero, y1: m.t, y2: H - m.b, class: "baseline" }, svg);
+}
+
+/* ============================ table ============================ */
+function tableFor(s) {
+  const incLabels = Object.keys(s.lines).filter(k => k[0] === "+");
+  const expLabels = Object.keys(s.lines).filter(k => k[0] !== "+")
+    .filter(k => sum(s.lines[k]) !== 0).sort((a, b) => sum(s.lines[b]) - sum(s.lines[a]));
+  const rows = [["section", "Income"]];
+  incLabels.forEach(k => rows.push(["item", k.slice(1), s.lines[k]]));
+  rows.push(["total", "Total income", s.income], ["section", "Operating expenses"]);
+  expLabels.forEach(k => rows.push(["item", k, s.lines[k]]));
+  rows.push(["total", "Total operating expenses (as subtotaled)", s.expenses],
+    ["section", ""], ["total", "Net operating income", s.noi],
+    ["item", "Debt service", s.debt], ["total", "Cash flow after debt", s.cashflow]);
+  if (sum(s.capex) !== 0) rows.push(["item", "Capital improvements", s.capex]);
+  let h = "<thead><tr><th>Line</th>" + s.months.map(m => `<th>${m}</th>`).join("") + "<th>YTD</th></tr></thead><tbody>";
+  rows.forEach(r => {
+    if (r[0] === "section") { h += `<tr class="section"><td colspan="${s.months.length + 2}">${esc(r[1])}</td></tr>`; return; }
+    h += `<tr class="${r[0] === "total" ? "total" : ""}"><td class="${r[0] === "item" ? "indent" : ""}">${esc(r[1])}</td>`
+      + r[2].map(v => `<td>${money2(v)}</td>`).join("") + `<td>${money2(sum(r[2]))}</td></tr>`;
+  });
+  return `<div class="scroller"><table>${h}</tbody></table></div>`;
+}
+
+/* ============================ views ============================ */
+function kpiTiles(s) {
+  const inc = s.ytd("income"), exp = s.ytd("expenses"), noi = s.ytd("noi");
+  const debt = s.ytd("debt"), cash = s.ytd("cashflow"), capex = s.ytd("capex");
+  const dscr = debt ? (noi / debt) : 0;
+  const negMonths = s.cashflow.filter(v => v < 0).length;
+  return `<section class="tiles">
+    <div class="tile"><div class="l">Total income</div><div class="v">${money(inc)}</div><div class="d">${money(s.ytd("rent"))} of it rent</div></div>
+    <div class="tile"><div class="l">Operating expenses</div><div class="v">${money(exp)}</div><div class="d">${inc ? (exp / inc * 100).toFixed(1) : 0}% of income</div></div>
+    <div class="tile"><div class="l">Debt service</div><div class="v">${money(debt)}</div><div class="d">${money(debt / s.months.length)} a month avg</div></div>
+    <div class="tile"><div class="l">Cash flow after debt</div><div class="v ${cash >= 0 ? "pos" : "neg"}">${money(cash)}</div><div class="d">${negMonths} of ${s.months.length} months negative</div></div>
+    <div class="tile"><div class="l">Debt service coverage</div><div class="v">${dscr.toFixed(2)}&times;</div><div class="d">NOI &divide; debt service</div></div>
+    <div class="tile"><div class="l">Capital improvements</div><div class="v">${money(capex)}</div><div class="d">${capex ? "outside NOI" : "none booked YTD"}</div></div>
+  </section>`;
+}
+
+function heroFor(s, label) {
+  const noi = s.ytd("noi"), inc = s.ytd("income");
+  const best = s.noi.indexOf(Math.max(...s.noi)), worst = s.noi.indexOf(Math.min(...s.noi));
+  return `<section class="hero">
+    <div>
+      <div class="label">${label}, year to date</div>
+      <div class="value">${money(noi)}</div>
+      <div class="heronote">${inc ? (noi / inc * 100).toFixed(1) : 0}% NOI margin on ${money(inc)} of income · ${s.months.length} months</div>
+    </div>
+    <div class="hero-side">
+      <div><div class="l">Best month</div><div class="v">${s.months[best]} · ${compact(s.noi[best])}</div></div>
+      <div><div class="l">Weakest month</div><div class="v">${s.months[worst]} · ${compact(s.noi[worst])}</div></div>
+      <div><div class="l">Monthly average</div><div class="v">${compact(noi / s.months.length)}</div></div>
+    </div>
+  </section>`;
+}
+
+const chartCard = (title, cap, legend, id, vb) => `<section class="card">
+  <h2>${title}</h2><p class="cap">${cap}</p>${legend}
+  <svg id="${id}" viewBox="${vb}" role="img" aria-label="${esc(title)}"></svg>
+</section>`;
+
+const LEGEND_IE = `<div class="legend">
+  <span><i class="key" style="background:var(--series-1)"></i>Income</span>
+  <span><i class="key" style="background:var(--series-2)"></i>Operating expenses</span></div>`;
+const LEGEND_NC = `<div class="legend">
+  <span><i class="key line" style="background:var(--series-1)"></i>Net operating income</span>
+  <span><i class="key line" style="background:var(--series-2)"></i>Cash flow after debt</span></div>`;
+const LEGEND_MIX = `<div class="legend">` + GROUP_NAMES.map((g, i) =>
+  `<span><i class="key" style="background:var(--${GROUP_VAR[i].slice(2)})"></i>${g}</span>`).join("") + `</div>`;
+
+function varianceNote(s) {
+  const v = s.ytd("variance");
+  if (Math.abs(v) < 1) return "";
+  const bad = s.months.filter((m, i) => Math.abs(s.variance[i]) > 0.01);
+  return `<div class="note"><b>A subtotal discrepancy in the source workbook.</b>
+    The expense subtotal excludes an insurance amount that is recorded in the same column in
+    <b>${bad.join(", ")}</b> — ${money2(v)} in total. Every figure here follows the workbook as reported.
+    Counting those amounts, operating expenses are <b>${money2(s.ytd("expensesRecorded"))}</b>,
+    NOI is <b>${money2(s.ytd("income") - s.ytd("expensesRecorded"))}</b> and cash flow after debt is
+    <b>${money2(s.ytd("income") - s.ytd("expensesRecorded") - s.ytd("debt"))}</b>.</div>`;
+}
+
+function renderPortfolio() {
+  const s = seriesFor("__ALL__");
+  const props = Object.keys(P.properties);
+  const rows = props.map(name => {
+    const p = seriesFor(name);
+    const noi = p.ytd("noi"), inc = p.ytd("income");
+    return { name, value: p.ytd("cashflow"), noi, debt: p.ytd("debt"),
+      margin: (inc ? (noi / inc * 100).toFixed(1) : "0") + "%" };
+  }).sort((a, b) => b.value - a.value);
+  const winners = rows.filter(r => r.value >= 0).length;
+
+  document.getElementById("viewTitle").textContent = "Portfolio";
+  document.getElementById("viewSub").textContent =
+    `${props.length} properties · ${P.months[0]}–${P.throughMonth} ${P.year} · accrual basis`;
+
+  document.getElementById("body").innerHTML =
+    heroFor(s, "Portfolio net operating income") + kpiTiles(s) +
+    `<div class="grid2">
+      ${chartCard("Income vs. operating expenses", "Monthly, across all properties.", LEGEND_IE, "cIE", "0 0 520 300")}
+      ${chartCard("NOI and cash flow after debt service", "Monthly, across all properties.", LEGEND_NC, "cNC", "0 0 520 300")}
+    </div>` +
+    chartCard("Cash flow after debt service, by property",
+      `Year to date. ${winners} of ${props.length} properties are cash-flow positive after debt. Click any row to open it.`,
+      `<div class="legend"><span><i class="key" style="background:var(--pos)"></i>Positive</span><span><i class="key" style="background:var(--negb)"></i>Negative</span></div>`,
+      "cRank", "0 0 1040 400") +
+    chartCard("Expense mix, month by month", "Recorded line items, grouped.", LEGEND_MIX, "cMix", "0 0 1040 320") +
+    chartCard("Operating spend by category", "Year-to-date totals across the portfolio.", "", "cBars", "0 0 1040 400") +
+    varianceNote(s) +
+    `<details class="tablewrap"><summary>Table view — portfolio, full monthly detail</summary>${tableFor(s)}</details>`;
+
+  chartIncomeExpense(document.getElementById("cIE"), s);
+  chartNoiCash(document.getElementById("cNC"), s);
+  chartRanking(document.getElementById("cRank"), rows, pick);
+  chartExpenseMix(document.getElementById("cMix"), s);
+  chartExpenseBars(document.getElementById("cBars"), s);
+}
+
+function renderProperty(name) {
+  const s = seriesFor(name);
+  const entity = Object.keys(P.entities).find(e => P.entities[e].includes(name)) || "";
+  document.getElementById("viewTitle").textContent = name;
+  document.getElementById("viewSub").textContent =
+    `${entity ? entity + " · " : ""}${P.months[0]}–${P.throughMonth} ${P.year} · accrual basis`;
+
+  document.getElementById("body").innerHTML =
+    heroFor(s, "Net operating income") + kpiTiles(s) +
+    `<div class="grid2">
+      ${chartCard("Income vs. operating expenses", "Monthly, in dollars.", LEGEND_IE, "cIE", "0 0 520 300")}
+      ${chartCard("NOI and cash flow after debt service", "Monthly. Cash flow is NOI less mortgage payments.", LEGEND_NC, "cNC", "0 0 520 300")}
+    </div>` +
+    chartCard("Where the operating spend went", "Year-to-date total by category, as recorded on each line.", "", "cBars", "0 0 1040 400") +
+    chartCard("Expense mix, month by month", "Fixed costs against the variable ones.", LEGEND_MIX, "cMix", "0 0 1040 320") +
+    varianceNote(s) +
+    `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s)}</details>`;
+
+  chartIncomeExpense(document.getElementById("cIE"), s);
+  chartNoiCash(document.getElementById("cNC"), s);
+  chartExpenseBars(document.getElementById("cBars"), s);
+  chartExpenseMix(document.getElementById("cMix"), s);
+}
+
+/* ============================ app ============================ */
+let CURRENT = "__ALL__";
+function pick(name) {
+  CURRENT = name;
+  document.getElementById("propSel").value = name;
+  location.hash = name === "__ALL__" ? "" : encodeURIComponent(name);
+  draw();
+  scrollTo({ top: 0, behavior: "smooth" });
+}
+function draw() {
+  hideTip();
+  if (CURRENT === "__ALL__") renderPortfolio(); else renderProperty(CURRENT);
+}
+
+function boot() {
+  initGroups();
+  const sel = document.getElementById("propSel");
+  let html = `<option value="__ALL__">Portfolio — all properties</option>`;
+  for (const e in P.entities) {
+    html += `<optgroup label="${esc(e)}">` +
+      P.entities[e].map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("") + `</optgroup>`;
+  }
+  const grouped = new Set(Object.values(P.entities).flat());
+  const loose = Object.keys(P.properties).filter(p => !grouped.has(p));
+  if (loose.length) html += `<optgroup label="Other">` + loose.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("") + `</optgroup>`;
+  sel.innerHTML = html;
+  sel.addEventListener("change", () => pick(sel.value));
+
+  const fromHash = decodeURIComponent(location.hash.slice(1));
+  if (fromHash && P.properties[fromHash]) { CURRENT = fromHash; sel.value = fromHash; }
+  addEventListener("hashchange", () => {
+    const h = decodeURIComponent(location.hash.slice(1));
+    const next = h && P.properties[h] ? h : "__ALL__";
+    if (next !== CURRENT) { CURRENT = next; sel.value = next; draw(); }
+  });
+
+  document.getElementById("foot").innerHTML =
+    `Generated ${esc(META.generated)} from <b>${esc(META.source)}</b>, the consolidated profit &amp; loss prepared by the portfolio accountant. ` +
+    `Figures follow that workbook as reported. Refreshed monthly.`;
+
+  const btn = document.getElementById("themeBtn");
+  if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "dark";
+  const syncBtn = () => btn.textContent = document.documentElement.dataset.theme === "dark" ? "Light mode" : "Dark mode";
+  syncBtn();
+  btn.addEventListener("click", () => {
+    document.documentElement.dataset.theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    syncBtn(); draw();
+  });
+  addEventListener("resize", hideTip);
+  draw();
+}
+</script>
+</body>
+</html>
