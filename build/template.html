@@ -90,8 +90,13 @@
   .chips { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
   .chips .lbl { font-size:12.5px; color:var(--text-secondary); }
   .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px;
-    background:var(--surface-1); border:1px solid var(--border); border-left:3px solid var(--series-2);
+    background:var(--surface-1); border:1px solid var(--border); border-left:3px solid var(--series-1);
     border-radius:999px; padding:4px 6px 4px 10px; color:var(--text-secondary); }
+  .chip.out { border-left-color:var(--series-2); }
+  .morebtn { background:transparent; border:0; color:var(--text-secondary); font:inherit;
+    font-size:12px; cursor:pointer; text-decoration:underline; text-underline-offset:3px;
+    padding:4px 6px; border-radius:8px; }
+  .morebtn:hover { color:var(--text-primary); background:var(--hover); }
   .chip button { background:transparent; border:0; color:var(--text-muted); cursor:pointer;
     font:inherit; font-size:14px; line-height:1; padding:0 3px; border-radius:50%; }
   .chip button:hover { color:var(--text-primary); background:var(--hover); }
@@ -815,20 +820,38 @@ function buildFilterPanel() {
   $("filterPanel").innerHTML = h;
 }
 
+/* The chip row lists what is IN the current view - that is the thing a reader
+   needs to know, and with 2 of 17 selected the inverse was a wall of 15 chips.
+   Past CHIP_CAP the list collapses so a near-complete selection stays readable. */
+const CHIP_CAP = 10;
+let CHIPS_EXPANDED = false;
+
 function updateFilterUI() {
   const inc = includedProps(), total = allProps().length;
   $("filterRow").hidden = VIEW.type === "property";
   $("filterLabel").textContent = isFiltered() ? `${inc.length} of ${total} properties` : `All ${total} properties`;
   $("filterBtn").classList.toggle("active", isFiltered());
-  const excluded = allProps().filter(p => !inc.includes(p));
   const chips = $("filterChips");
-  if (!excluded.length) { chips.innerHTML = ""; return; }
-  chips.innerHTML = `<span class="lbl">Excluded:</span>` + excluded.map(p =>
-    `<span class="chip">${esc(p)}<button type="button" data-restore="${esc(p)}" aria-label="Add ${esc(p)} back">&times;</button></span>`).join("");
+  if (!isFiltered()) { chips.innerHTML = ""; CHIPS_EXPANDED = false; return; }
+
+  const shown = CHIPS_EXPANDED ? inc : inc.slice(0, CHIP_CAP);
+  const only = inc.length === 1;   // the view must keep at least one property
+  let h = `<span class="lbl">Showing:</span>` + shown.map(p =>
+    `<span class="chip">${esc(p)}` +
+    (only ? "" : `<button type="button" data-remove="${esc(p)}" aria-label="Remove ${esc(p)} from this view" title="Remove from this view">&times;</button>`) +
+    `</span>`).join("");
+  if (inc.length > CHIP_CAP) {
+    h += `<button type="button" class="morebtn" data-more="1">` +
+      (CHIPS_EXPANDED ? "show fewer" : `+${inc.length - CHIP_CAP} more`) + `</button>`;
+  }
+  const exN = total - inc.length;
+  if (exN) h += `<button type="button" class="morebtn" data-addback="1" title="Open the filter to add properties back">${exN} excluded</button>`;
+  chips.innerHTML = h;
 }
 
 function applySelection(set, label) {
   const arr = [...set];
+  if (arr.length <= CHIP_CAP) CHIPS_EXPANDED = false;
   setInclude(arr.length === allProps().length ? null : arr, label || "Custom selection");
   writeHash();
   syncSelector();
@@ -851,10 +874,22 @@ document.addEventListener("click", e => {
   $("filterBtn").setAttribute("aria-expanded", "false");
 });
 $("filterChips").addEventListener("click", e => {
-  const p = e.target.dataset.restore;
-  if (!p) return;
-  const set = new Set(includedProps()); set.add(p);
-  applySelection(set);
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const d = btn.dataset;
+  if (d.more) { CHIPS_EXPANDED = !CHIPS_EXPANDED; updateFilterUI(); return; }
+  if (d.addback) {
+    buildFilterPanel();
+    $("filterPanel").hidden = false;
+    $("filterBtn").setAttribute("aria-expanded", "true");
+    return;
+  }
+  if (d.remove) {
+    const set = new Set(includedProps());
+    set.delete(d.remove);
+    if (!set.size) return;                  // never leave the view empty
+    applySelection(set);
+  }
 });
 $("filterPanel").addEventListener("change", e => {
   const prop = e.target.dataset.prop;
