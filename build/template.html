@@ -60,6 +60,44 @@
   select { border-radius:10px; }
   .toggle:hover, select:hover { color:var(--text-primary); }
 
+  /* ---------- property filter ---------- */
+  .filterrow { display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; margin:0 0 16px; }
+  .filterwrap { position:relative; }
+  .filterbtn { background:var(--surface-1); border:1px solid var(--border); color:var(--text-secondary);
+    border-radius:10px; padding:8px 14px; font:inherit; font-size:12.5px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:8px; }
+  .filterbtn:hover { color:var(--text-primary); }
+  .filterbtn.active { border-color:var(--series-2); color:var(--text-primary); }
+  .filterbtn .caret { font-size:10px; color:var(--text-muted); }
+  .filterpanel { position:absolute; z-index:30; top:calc(100% + 6px); left:0; width:290px;
+    max-height:60vh; overflow-y:auto; background:var(--surface-1); border:1px solid var(--border);
+    border-radius:12px; padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+  .filterpanel .fhead { display:flex; gap:8px; padding:4px 6px 10px; border-bottom:1px solid var(--grid); margin-bottom:6px; }
+  .filterpanel .fhead button { flex:1; background:transparent; border:1px solid var(--border);
+    border-radius:8px; padding:6px; font:inherit; font-size:12px; color:var(--text-secondary); cursor:pointer; }
+  .filterpanel .fhead button:hover { color:var(--text-primary); background:var(--hover); }
+  .fgroup { font-size:11.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em;
+    padding:10px 6px 4px; display:flex; justify-content:space-between; align-items:center; }
+  .fgroup button { background:transparent; border:0; color:var(--text-muted); font:inherit;
+    font-size:11px; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+  .fgroup button:hover { color:var(--text-primary); }
+  .fitem { display:flex; align-items:center; gap:9px; padding:6px 6px; border-radius:8px;
+    font-size:13px; cursor:pointer; }
+  .fitem:hover { background:var(--hover); }
+  .fitem input { accent-color:var(--series-1); width:15px; height:15px; cursor:pointer; flex:none; }
+  .fitem.off { color:var(--text-muted); }
+  .fitem input:disabled { cursor:default; opacity:.5; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .chips .lbl { font-size:12.5px; color:var(--text-secondary); }
+  .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px;
+    background:var(--surface-1); border:1px solid var(--border); border-left:3px solid var(--series-2);
+    border-radius:999px; padding:4px 6px 4px 10px; color:var(--text-secondary); }
+  .chip button { background:transparent; border:0; color:var(--text-muted); cursor:pointer;
+    font:inherit; font-size:14px; line-height:1; padding:0 3px; border-radius:50%; }
+  .chip button:hover { color:var(--text-primary); background:var(--hover); }
+  .emptystate { background:var(--surface-1); border:1px solid var(--border); border-radius:14px;
+    padding:40px 24px; text-align:center; color:var(--text-secondary); }
+
   .hero { background:var(--surface-1); border:1px solid var(--border); border-radius:14px;
     padding:24px 26px; margin-bottom:16px; display:flex; align-items:flex-end; gap:40px; flex-wrap:wrap; }
   .hero .label { color:var(--text-secondary); font-size:13px; }
@@ -121,6 +159,13 @@
   tbody tr.clickable { cursor:pointer; }
   tbody tr.clickable:hover td { background:var(--hover); }
 
+  .tabletools { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+  .dlbtn { background:var(--surface-1); border:1px solid var(--border); color:var(--text-secondary);
+    border-radius:9px; padding:7px 13px; font:inherit; font-size:12.5px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:7px; }
+  .dlbtn:hover { color:var(--text-primary); background:var(--hover); }
+  .dlbtn.done { color:var(--good); border-color:var(--good); }
+
   .note { background:var(--surface-1); border:1px solid var(--border);
     border-left:3px solid var(--warning); border-radius:10px; padding:14px 18px;
     font-size:12.5px; color:var(--text-secondary); margin-bottom:16px; }
@@ -152,6 +197,15 @@
       <button class="toggle" id="themeBtn" type="button">Dark mode</button>
     </div>
   </header>
+  <div class="filterrow" id="filterRow" hidden>
+    <div class="filterwrap">
+      <button class="filterbtn" id="filterBtn" type="button" aria-expanded="false" aria-controls="filterPanel">
+        <span id="filterLabel">All properties</span><span class="caret">&#9662;</span>
+      </button>
+      <div class="filterpanel" id="filterPanel" hidden role="group" aria-label="Choose properties to include"></div>
+    </div>
+    <div class="chips" id="filterChips"></div>
+  </div>
   <div id="body"></div>
   <footer id="foot"></footer>
 </div>
@@ -264,6 +318,30 @@ function initGroups() {
 const GROUP_NAMES = ["Taxes & insurance", "Repairs & handyman", "Utilities", "Management & admin"];
 const GROUP_VAR = ["--series-1", "--series-2", "--series-3", "--series-4"];
 
+/* ---- view model ----
+   A portfolio view is a SET of properties. "All properties" is just the set of
+   everything; an entity preset is that entity's members; a saved group is a set
+   the viewer named. Single-property views ignore the set entirely - excluding a
+   property from the roll-up does not hide its own page. */
+const VIEW = { type: "portfolio", label: "Portfolio", include: null };  // include:null = all
+const allProps = () => Object.keys(P.properties);
+const includedProps = () =>
+  VIEW.include ? allProps().filter(p => VIEW.include.has(p)) : allProps();
+const isFiltered = () => !!VIEW.include && VIEW.include.size < allProps().length;
+
+/* Saved groups live in this viewer's browser only. They survive the monthly
+   rebuild (nothing about them is baked into the page) but they do not follow the
+   viewer to another device, and another viewer sees their own. Sharing a group
+   means sharing the URL, which encodes the selection. */
+const GKEY = "taglyz.groups.v1";
+function loadGroups() {
+  try { return JSON.parse(localStorage.getItem(GKEY)) || []; } catch (_) { return []; }
+}
+function saveGroups(g) {
+  try { localStorage.setItem(GKEY, JSON.stringify(g)); return true; } catch (_) { return false; }
+}
+let GROUPS = [];
+
 /* A "series" is the shape every chart consumes, for one property or the whole portfolio. */
 function seriesFor(name) {
   const n = P.months.length;
@@ -275,7 +353,7 @@ function seriesFor(name) {
     rent: zeros(), lines: {}, groups: {}
   };
   GROUP_NAMES.forEach(g => s.groups[g] = zeros());
-  const list = name === "__ALL__" ? Object.keys(P.properties) : [name];
+  const list = name === "__ALL__" ? includedProps() : [name];
   for (const prop of list) {
     const months = P.properties[prop];
     for (let i = 0; i < n; i++) {
@@ -466,7 +544,7 @@ function chartRanking(svg, rows, onPick) {
 }
 
 /* ============================ table ============================ */
-function tableFor(s) {
+function tableRows(s) {
   const incLabels = Object.keys(s.lines).filter(k => k[0] === "+");
   const expLabels = Object.keys(s.lines).filter(k => k[0] !== "+")
     .filter(k => sum(s.lines[k]) !== 0).sort((a, b) => sum(s.lines[b]) - sum(s.lines[a]));
@@ -478,13 +556,80 @@ function tableFor(s) {
     ["section", ""], ["total", "Net operating income", s.noi],
     ["item", "Debt service", s.debt], ["total", "Cash flow after debt", s.cashflow]);
   if (sum(s.capex) !== 0) rows.push(["item", "Capital improvements", s.capex]);
+  return rows;
+}
+
+function tableFor(s) {
+  const rows = tableRows(s);
   let h = "<thead><tr><th>Line</th>" + s.months.map(m => `<th>${m}</th>`).join("") + "<th>YTD</th></tr></thead><tbody>";
   rows.forEach(r => {
     if (r[0] === "section") { h += `<tr class="section"><td colspan="${s.months.length + 2}">${esc(r[1])}</td></tr>`; return; }
     h += `<tr class="${r[0] === "total" ? "total" : ""}"><td class="${r[0] === "item" ? "indent" : ""}">${esc(r[1])}</td>`
       + r[2].map(v => `<td>${money2(v)}</td>`).join("") + `<td>${money2(sum(r[2]))}</td></tr>`;
   });
-  return `<div class="scroller"><table>${h}</tbody></table></div>`;
+  return `<div class="tabletools">
+      <button type="button" class="dlbtn" data-download="csv">&#8595; Download CSV</button>
+    </div>
+    <div class="scroller"><table>${h}</tbody></table></div>`;
+}
+
+/* ---------- CSV export ----------
+   Values go out as raw numbers, not the formatted strings in the table, so the
+   file lands in a spreadsheet as numbers rather than text. The leading block
+   records which slice of the portfolio this is - a CSV of a filtered view that
+   does not say so is exactly the thing the on-screen chrome guards against. */
+function csvEscape(v) {
+  const t = String(v);
+  return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+}
+function buildCSV(s, title) {
+  const L = [];
+  const inc = includedProps(), excluded = allProps().filter(p => !inc.includes(p));
+  L.push(["TAGLYZ portfolio report"]);
+  L.push(["View", title]);
+  if (VIEW.type === "portfolio") {
+    L.push(["Properties included", isFiltered() ? `${inc.length} of ${allProps().length}` : `all ${allProps().length}`]);
+    L.push(["Included", inc.join("; ")]);
+    if (excluded.length) L.push(["Excluded", excluded.join("; ")]);
+  }
+  L.push(["Period", `${s.months[0]}-${P.throughMonth} ${P.year}`]);
+  L.push(["Source", META.source]);
+  L.push(["Basis", "Accrual. Figures as reported in the source workbook."]);
+  const variance = s.ytd("variance");
+  if (Math.abs(variance) >= 1) {
+    L.push(["Note", `The source workbook's expense subtotals omit an insurance amount recorded in the same column; ` +
+      `${money2(variance)} in total. Counting it, operating expenses are ${money2(s.ytd("expensesRecorded"))}.`]);
+  }
+  L.push([]);
+  L.push(["Line", ...s.months, "YTD"]);
+  tableRows(s).forEach(r => {
+    if (r[0] === "section") { if (r[1]) L.push([]), L.push([r[1]]); return; }
+    L.push([r[1], ...r[2].map(v => v.toFixed(2)), sum(r[2]).toFixed(2)]);
+  });
+  return L.map(row => row.map(csvEscape).join(",")).join("\r\n");
+}
+
+function downloadCSV(btn) {
+  const s = VIEW.type === "portfolio" ? seriesFor("__ALL__") : seriesFor(VIEW.label);
+  const title = VIEW.type === "portfolio"
+    ? VIEW.label + (isFiltered() ? ` (${includedProps().length} of ${allProps().length} properties)` : "")
+    : VIEW.label;
+  const slug = (VIEW.label || "portfolio").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const name = `TAGLYZ-${slug}-${s.months[0]}-${P.throughMonth}-${P.year}.csv`;
+  // \uFEFF: without the BOM Excel reads the file as the local codepage and mangles
+  // the non-ASCII characters in the note lines.
+  const blob = new Blob(["\uFEFF" + buildCSV(s, title)], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  if (btn) {
+    const was = btn.innerHTML;
+    btn.innerHTML = "&#10003; " + name;
+    btn.classList.add("done");
+    setTimeout(() => { btn.innerHTML = was; btn.classList.remove("done"); }, 2600);
+  }
 }
 
 /* ============================ views ============================ */
@@ -546,9 +691,21 @@ function varianceNote(s) {
     <b>${money2(s.ytd("income") - s.ytd("expensesRecorded") - s.ytd("debt"))}</b>.</div>`;
 }
 
+function scopeLabel() {
+  const n = includedProps().length;
+  return isFiltered() ? `across the ${n} selected propert${n === 1 ? "y" : "ies"}` : "across all properties";
+}
+
 function renderPortfolio() {
+  const props = includedProps();
+  if (!props.length) {
+    document.getElementById("viewTitle").textContent = VIEW.label;
+    document.getElementById("viewSub").textContent = "No properties selected";
+    document.getElementById("body").innerHTML =
+      `<div class="emptystate">No properties selected. Pick at least one from the filter above.</div>`;
+    return;
+  }
   const s = seriesFor("__ALL__");
-  const props = Object.keys(P.properties);
   const rows = props.map(name => {
     const p = seriesFor(name);
     const noi = p.ytd("noi"), inc = p.ytd("income");
@@ -557,24 +714,28 @@ function renderPortfolio() {
   }).sort((a, b) => b.value - a.value);
   const winners = rows.filter(r => r.value >= 0).length;
 
-  document.getElementById("viewTitle").textContent = "Portfolio";
+  const total = allProps().length;
+  const excluded = allProps().filter(p => !props.includes(p));
+  document.getElementById("viewTitle").textContent = VIEW.label;
   document.getElementById("viewSub").textContent =
-    `${props.length} properties · ${P.months[0]}–${P.throughMonth} ${P.year} · accrual basis`;
+    (isFiltered() ? `${props.length} of ${total} properties` : `${total} properties`) +
+    ` · ${P.months[0]}–${P.throughMonth} ${P.year} · accrual basis` +
+    (excluded.length && excluded.length <= 4 ? ` · excluding ${excluded.join(", ")}` : "");
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Portfolio net operating income") + kpiTiles(s) +
     `<div class="grid2">
-      ${chartCard("Income vs. operating expenses", "Monthly, across all properties.", LEGEND_IE, "cIE", "0 0 520 300")}
-      ${chartCard("NOI and cash flow after debt service", "Monthly, across all properties.", LEGEND_NC, "cNC", "0 0 520 300")}
+      ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.`, LEGEND_IE, "cIE", "0 0 520 300")}
+      ${chartCard("NOI and cash flow after debt service", `Monthly, ${scopeLabel()}.`, LEGEND_NC, "cNC", "0 0 520 300")}
     </div>` +
     chartCard("Cash flow after debt service, by property",
-      `Year to date. ${winners} of ${props.length} properties are cash-flow positive after debt. Click any row to open it.`,
+      `Year to date. ${winners} of ${props.length} ${isFiltered() ? "selected " : ""}properties are cash-flow positive after debt. Click any row to open it.`,
       `<div class="legend"><span><i class="key" style="background:var(--pos)"></i>Positive</span><span><i class="key" style="background:var(--negb)"></i>Negative</span></div>`,
       "cRank", "0 0 1040 400") +
-    chartCard("Expense mix, month by month", "Recorded line items, grouped.", LEGEND_MIX, "cMix", "0 0 1040 320") +
-    chartCard("Operating spend by category", "Year-to-date totals across the portfolio.", "", "cBars", "0 0 1040 400") +
+    chartCard("Expense mix, month by month", `Recorded line items, grouped, ${scopeLabel()}.`, LEGEND_MIX, "cMix", "0 0 1040 320") +
+    chartCard("Operating spend by category", `Year-to-date totals ${scopeLabel()}.`, "", "cBars", "0 0 1040 400") +
     varianceNote(s) +
-    `<details class="tablewrap"><summary>Table view — portfolio, full monthly detail</summary>${tableFor(s)}</details>`;
+    `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s)}</details>`;
 
   chartIncomeExpense(document.getElementById("cIE"), s);
   chartNoiCash(document.getElementById("cNC"), s);
@@ -607,53 +768,249 @@ function renderProperty(name) {
   chartExpenseMix(document.getElementById("cMix"), s);
 }
 
-/* ============================ app ============================ */
-let CURRENT = "__ALL__";
-function pick(name) {
-  CURRENT = name;
-  document.getElementById("propSel").value = name;
-  location.hash = name === "__ALL__" ? "" : encodeURIComponent(name);
-  draw();
-  scrollTo({ top: 0, behavior: "smooth" });
-}
-function draw() {
-  hideTip();
-  if (CURRENT === "__ALL__") renderPortfolio(); else renderProperty(CURRENT);
+/* ============================ filter UI ============================ */
+const $ = id => document.getElementById(id);
+
+function setInclude(set, label, type) {
+  VIEW.include = set ? new Set(set) : null;
+  VIEW.label = label;
+  VIEW.type = type || "portfolio";
 }
 
-function boot() {
-  initGroups();
-  const sel = document.getElementById("propSel");
+function entityOf(prop) {
+  return Object.keys(P.entities).find(e => P.entities[e].includes(prop)) || "Other";
+}
+function propsByEntity() {
+  const out = {};
+  allProps().forEach(p => (out[entityOf(p)] = out[entityOf(p)] || []).push(p));
+  return out;
+}
+
+function buildFilterPanel() {
+  const inc = new Set(includedProps());
+  const byEnt = propsByEntity();
+  let h = `<div class="fhead">
+      <button type="button" data-all="1">Select all</button>
+      <button type="button" data-none="1">Clear all</button>
+    </div>`;
+  for (const ent in byEnt) {
+    h += `<div class="fgroup"><span>${esc(ent)}</span><button type="button" data-ent="${esc(ent)}">only</button></div>`;
+    h += byEnt[ent].map(p => {
+      const on = inc.has(p);
+      return `<label class="fitem ${on ? "" : "off"}">
+        <input type="checkbox" data-prop="${esc(p)}" ${on ? "checked" : ""}>
+        <span>${esc(p)}</span></label>`;
+    }).join("");
+  }
+  h += `<div class="fhead" style="border-bottom:0;border-top:1px solid var(--grid);margin:8px 0 0;padding:10px 6px 2px">
+      <button type="button" data-save="1">Save selection as a group…</button>
+    </div>`;
+  if (GROUPS.length) {
+    h += `<div class="fgroup"><span>Saved groups</span></div>`;
+    h += GROUPS.map(g => `<div class="fitem" style="justify-content:space-between">
+        <span style="cursor:pointer" data-open="${esc(g.id)}">${esc(g.name)} <span style="color:var(--text-muted)">(${g.props.length})</span></span>
+        <button type="button" data-del="${esc(g.id)}" style="background:transparent;border:0;color:var(--text-muted);cursor:pointer;font-size:15px">&times;</button>
+      </div>`).join("");
+  }
+  $("filterPanel").innerHTML = h;
+}
+
+function updateFilterUI() {
+  const inc = includedProps(), total = allProps().length;
+  $("filterRow").hidden = VIEW.type === "property";
+  $("filterLabel").textContent = isFiltered() ? `${inc.length} of ${total} properties` : `All ${total} properties`;
+  $("filterBtn").classList.toggle("active", isFiltered());
+  const excluded = allProps().filter(p => !inc.includes(p));
+  const chips = $("filterChips");
+  if (!excluded.length) { chips.innerHTML = ""; return; }
+  chips.innerHTML = `<span class="lbl">Excluded:</span>` + excluded.map(p =>
+    `<span class="chip">${esc(p)}<button type="button" data-restore="${esc(p)}" aria-label="Add ${esc(p)} back">&times;</button></span>`).join("");
+}
+
+function applySelection(set, label) {
+  const arr = [...set];
+  setInclude(arr.length === allProps().length ? null : arr, label || "Custom selection");
+  writeHash();
+  syncSelector();
+  draw();
+}
+
+$("filterBtn").addEventListener("click", () => {
+  const p = $("filterPanel"), open = p.hidden;
+  if (open) buildFilterPanel();
+  p.hidden = !open;
+  $("filterBtn").setAttribute("aria-expanded", String(open));
+});
+document.addEventListener("click", e => {
+  if ($("filterPanel").hidden) return;
+  // composedPath() is captured at dispatch, so this still reports the true origin
+  // even when a handler upstream has already re-rendered the panel's contents
+  // (e.target would by then be detached, and closest() would wrongly say "outside").
+  if (e.composedPath().includes($("filterPanel")) || e.composedPath().includes($("filterBtn"))) return;
+  $("filterPanel").hidden = true;
+  $("filterBtn").setAttribute("aria-expanded", "false");
+});
+$("filterChips").addEventListener("click", e => {
+  const p = e.target.dataset.restore;
+  if (!p) return;
+  const set = new Set(includedProps()); set.add(p);
+  applySelection(set);
+});
+$("filterPanel").addEventListener("change", e => {
+  const prop = e.target.dataset.prop;
+  if (!prop) return;
+  const set = new Set(includedProps());
+  e.target.checked ? set.add(prop) : set.delete(prop);
+  if (!set.size) { e.target.checked = true; return; }   // never leave the view empty
+  applySelection(set);
+  buildFilterPanel();
+});
+$("filterPanel").addEventListener("click", e => {
+  const d = e.target.dataset;
+  if (d.all) { applySelection(new Set(allProps()), "Portfolio"); buildFilterPanel(); }
+  else if (d.none) { /* clearing everything would leave nothing to show */
+    const first = allProps()[0];
+    applySelection(new Set([first])); buildFilterPanel();
+  }
+  else if (d.ent) { applySelection(new Set(P.entities[d.ent] || []), d.ent); buildFilterPanel(); }
+  else if (d.save) { saveCurrentAsGroup(); }
+  else if (d.open) { const g = GROUPS.find(x => x.id === d.open); if (g) openGroup(g); }
+  else if (d.del) {
+    GROUPS = GROUPS.filter(x => x.id !== d.del); saveGroups(GROUPS);
+    buildFilterPanel(); syncSelector();
+  }
+});
+
+function saveCurrentAsGroup() {
+  const props = includedProps();
+  const name = (prompt("Name this group", VIEW.label === "Custom selection" ? "" : VIEW.label) || "").trim();
+  if (!name) return;
+  const existing = GROUPS.find(g => g.name.toLowerCase() === name.toLowerCase());
+  if (existing) existing.props = props;
+  else GROUPS.push({ id: "g" + Date.now().toString(36), name, props });
+  if (!saveGroups(GROUPS)) {
+    alert("This browser would not let me save the group, so it will not persist. The URL still holds the selection - bookmark it instead.");
+  }
+  VIEW.label = name;
+  buildFilterPanel(); syncSelector(); writeHash(); draw();
+}
+function openGroup(g) {
+  const props = g.props.filter(p => P.properties[p]);   // a property may have left the workbook
+  if (!props.length) { alert(`None of the properties in "${g.name}" are in the current report.`); return; }
+  setInclude(props.length === allProps().length ? null : props, g.name);
+  writeHash(); syncSelector(); draw();
+  $("filterPanel").hidden = true;
+}
+
+/* ============================ routing ============================ */
+function writeHash() {
+  let h = "";
+  if (VIEW.type === "property") h = encodeURIComponent(VIEW.label);
+  else if (isFiltered()) h = "g=" + includedProps().map(encodeURIComponent).join(",");
+  history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
+}
+function readHash() {
+  const raw = location.hash.slice(1);
+  if (!raw) { setInclude(null, "Portfolio"); return; }
+  if (raw.startsWith("g=")) {
+    const props = raw.slice(2).split(",").map(decodeURIComponent).filter(p => P.properties[p]);
+    if (props.length) {
+      const named = GROUPS.find(g => g.props.length === props.length && g.props.every(p => props.includes(p)));
+      const ent = Object.keys(P.entities).find(e =>
+        P.entities[e].length === props.length && P.entities[e].every(p => props.includes(p)));
+      setInclude(props, named ? named.name : ent || "Custom selection");
+      return;
+    }
+  }
+  const name = decodeURIComponent(raw);
+  if (P.properties[name]) { VIEW.type = "property"; VIEW.label = name; VIEW.include = null; return; }
+  setInclude(null, "Portfolio");
+}
+
+function syncSelector() {
+  const sel = $("propSel");
   let html = `<option value="__ALL__">Portfolio — all properties</option>`;
+  if (GROUPS.length) {
+    html += `<optgroup label="Saved groups">` + GROUPS.map(g =>
+      `<option value="__g:${esc(g.id)}">${esc(g.name)} (${g.props.length})</option>`).join("") + `</optgroup>`;
+  }
+  const ents = Object.keys(P.entities).filter(e => P.entities[e].length > 1);
+  if (ents.length) {
+    html += `<optgroup label="Entities">` + ents.map(e =>
+      `<option value="__e:${esc(e)}">${esc(e)} (${P.entities[e].length})</option>`).join("") + `</optgroup>`;
+  }
   for (const e in P.entities) {
     html += `<optgroup label="${esc(e)}">` +
       P.entities[e].map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("") + `</optgroup>`;
   }
   const grouped = new Set(Object.values(P.entities).flat());
-  const loose = Object.keys(P.properties).filter(p => !grouped.has(p));
-  if (loose.length) html += `<optgroup label="Other">` + loose.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("") + `</optgroup>`;
+  const loose = allProps().filter(p => !grouped.has(p));
+  if (loose.length) html += `<optgroup label="Other">` +
+    loose.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("") + `</optgroup>`;
+  // Reflect the current view in the selector where one of its options matches it.
+  let val = "__ALL__";
+  if (VIEW.type === "property") val = VIEW.label;
+  else if (isFiltered()) {
+    const inc = includedProps();
+    const g = GROUPS.find(x => x.props.length === inc.length && x.props.every(p => inc.includes(p)));
+    const e = Object.keys(P.entities).find(x =>
+      P.entities[x].length === inc.length && P.entities[x].every(p => inc.includes(p)));
+    val = g ? "__g:" + g.id : e ? "__e:" + e : "__CUSTOM__";
+    if (val === "__CUSTOM__") {
+      html = `<option value="__CUSTOM__">Custom selection (${inc.length})</option>` + html;
+    }
+  }
   sel.innerHTML = html;
-  sel.addEventListener("change", () => pick(sel.value));
+  sel.value = val;
+}
 
-  const fromHash = decodeURIComponent(location.hash.slice(1));
-  if (fromHash && P.properties[fromHash]) { CURRENT = fromHash; sel.value = fromHash; }
-  addEventListener("hashchange", () => {
-    const h = decodeURIComponent(location.hash.slice(1));
-    const next = h && P.properties[h] ? h : "__ALL__";
-    if (next !== CURRENT) { CURRENT = next; sel.value = next; draw(); }
-  });
+function pick(v) {
+  if (v === "__CUSTOM__") return;
+  if (v === "__ALL__") setInclude(null, "Portfolio");
+  else if (v.startsWith("__g:")) {
+    const g = GROUPS.find(x => x.id === v.slice(4));
+    if (g) return openGroup(g);
+  } else if (v.startsWith("__e:")) {
+    const e = v.slice(4);
+    setInclude(P.entities[e] || [], e);
+  } else if (P.properties[v]) {
+    VIEW.type = "property"; VIEW.label = v; VIEW.include = null;
+  }
+  writeHash(); syncSelector(); draw();
+  scrollTo({ top: 0, behavior: "smooth" });
+}
 
-  document.getElementById("foot").innerHTML =
+function draw() {
+  hideTip();
+  updateFilterUI();
+  if (VIEW.type === "portfolio") renderPortfolio(); else renderProperty(VIEW.label);
+}
+
+/* ============================ app ============================ */
+function boot() {
+  initGroups();
+  GROUPS = loadGroups();
+  readHash();
+  syncSelector();
+  $("propSel").addEventListener("change", e => pick(e.target.value));
+  addEventListener("hashchange", () => { readHash(); syncSelector(); draw(); });
+
+  $("foot").innerHTML =
     `Generated ${esc(META.generated)} from <b>${esc(META.source)}</b>, the consolidated profit &amp; loss prepared by the portfolio accountant. ` +
-    `Figures follow that workbook as reported. Refreshed monthly.`;
+    `Figures follow that workbook as reported. Refreshed monthly. ` +
+    `Saved groups are stored in this browser; share a view by copying the URL.`;
 
-  const btn = document.getElementById("themeBtn");
+  const btn = $("themeBtn");
   if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "dark";
   const syncBtn = () => btn.textContent = document.documentElement.dataset.theme === "dark" ? "Light mode" : "Dark mode";
   syncBtn();
   btn.addEventListener("click", () => {
     document.documentElement.dataset.theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
     syncBtn(); draw();
+  });
+  $("body").addEventListener("click", e => {
+    const btn = e.target.closest("[data-download]");
+    if (btn) downloadCSV(btn);
   });
   addEventListener("resize", hideTip);
   draw();

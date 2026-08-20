@@ -9,5 +9,5 @@ pip install openpyxl cryptography
 python3 taglyz_builder.py <workbook.xlsx> "<source file name>" "<passphrase>" <outdir>
 ```
 
-The three source files beside it are what it was generated from; edit those and
-regenerate if you need to change the report.
+The files beside it are the sources it was built from. Edit those, then run
+`python3 bundle.py` to regenerate `taglyz_builder.py`.
