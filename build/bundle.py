@@ -1,4 +1,4 @@
-import base64
+import base64, textwrap
 tmpl = open('template.html','rb').read()
 parse_src = open('parse.py').read(); build_src = open('build.py').read()
 parse_body = parse_src.split('if __name__ ==')[0].replace('def parse(path):','def parse_workbook(path):')
@@ -9,6 +9,7 @@ build_body = build_body.replace('''    here = os.path.dirname(os.path.abspath(__
 build_body = build_body.replace('''    with open(os.path.join(here, "template.html")) as f:
         tmpl = f.read()''','''    tmpl = base64.b64decode(TEMPLATE_B64).decode()''')
 build_body = build_body.replace('payload = parse.parse(workbook)','payload = parse_workbook(workbook)')
+_b64_lines = '\n'.join('    "%s"' % c for c in textwrap.wrap(base64.b64encode(tmpl).decode(), 100))
 open('taglyz_builder.py','w').write(f'''#!/usr/bin/env python3
 """
 TAGLYZ portfolio report - self-contained builder.
@@ -25,7 +26,7 @@ pipeline travels as one artifact. Regenerate with bundle.py after editing those.
 {parse_body}
 {build_body}
 
-TEMPLATE_B64 = "{base64.b64encode(tmpl).decode()}"
+TEMPLATE_B64 = "".join([\n{_b64_lines}\n])
 
 if __name__ == "__main__":
     main()

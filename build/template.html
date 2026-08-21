@@ -808,6 +808,7 @@ function renderPortfolio() {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Portfolio cash flow after debt") + kpiTiles(s) +
+    `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
       ${chartCard("NOI and cash flow after debt service", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_NC, "cNC", "0 0 520 300")}
@@ -818,8 +819,7 @@ function renderPortfolio() {
       "cRank", "0 0 1040 400") +
     chartCard("Expense mix, month by month", `Recorded line items, grouped, ${scopeLabel()}.${monthNote()}`, LEGEND_MIX, "cMix", "0 0 1040 320") +
     chartCard("Operating spend by category", `${mFiltered() ? mLabel() : "Year-to-date"} totals ${scopeLabel()}.`, "", "cBars", "0 0 1040 400") +
-    varianceNote(s) +
-    `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s)}</details>`;
+    varianceNote(s);
 
   chartIncomeExpense(document.getElementById("cIE"), s);
   chartNoiCash(document.getElementById("cNC"), s);
@@ -837,14 +837,14 @@ function renderProperty(name) {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Cash flow after debt") + kpiTiles(s) +
+    `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, in dollars.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
       ${chartCard("NOI and cash flow after debt service", `Monthly. Cash flow is NOI less mortgage payments.${monthNote()}`, LEGEND_NC, "cNC", "0 0 520 300")}
     </div>` +
     chartCard("Where the operating spend went", `${mFiltered() ? mLabel() : "Year-to-date"} total by category, as recorded on each line.`, "", "cBars", "0 0 1040 400") +
     chartCard("Expense mix, month by month", "Fixed costs against the variable ones.", LEGEND_MIX, "cMix", "0 0 1040 320") +
-    varianceNote(s) +
-    `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s)}</details>`;
+    varianceNote(s);
 
   chartIncomeExpense(document.getElementById("cIE"), s);
   chartNoiCash(document.getElementById("cNC"), s);
