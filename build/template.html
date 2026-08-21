@@ -60,6 +60,16 @@
   select { border-radius:10px; }
   .toggle:hover, select:hover { color:var(--text-primary); }
 
+  /* ---------- month chips ---------- */
+  .monthrow { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 0 10px; }
+  .mchip { font:inherit; font-size:12.5px; background:var(--surface-1); color:var(--text-secondary);
+    border:1px solid var(--border); border-radius:999px; padding:6px 14px; cursor:pointer; }
+  .mchip:hover { color:var(--text-primary); background:var(--hover); }
+  .mchip[aria-pressed="true"] { background:var(--series-1); border-color:var(--series-1); color:#fff; }
+  .mchip.inrange { border-color:var(--series-1); color:var(--text-primary); }
+  .monthrow .sep { width:1px; height:20px; background:var(--grid); margin:0 5px; }
+  .monthrow .hint { font-size:12px; color:var(--text-muted); margin-left:4px; }
+
   /* ---------- property filter ---------- */
   .filterrow { display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; margin:0 0 16px; }
   .filterwrap { position:relative; }
@@ -136,6 +146,9 @@
   .tick { fill:var(--text-muted); font-size:11px; font-variant-numeric:tabular-nums; }
   .xlab { fill:var(--text-secondary); font-size:11.5px; }
   .dlab { fill:var(--text-primary); font-size:11.5px; font-weight:600; }
+  .dim { opacity:0.2; }
+  :root[data-theme="dark"] .dim { opacity:0.26; }
+  .xlab.on { fill:var(--text-primary); font-weight:650; }
   .gridline { stroke:var(--grid); stroke-width:1; }
   .baseline { stroke:var(--axis); stroke-width:1; }
   .rowhit { fill:transparent; cursor:pointer; }
@@ -202,6 +215,7 @@
       <button class="toggle" id="themeBtn" type="button">Dark mode</button>
     </div>
   </header>
+  <div class="monthrow" id="monthRow" role="group" aria-label="Choose months"></div>
   <div class="filterrow" id="filterRow" hidden>
     <div class="filterwrap">
       <button class="filterbtn" id="filterBtn" type="button" aria-expanded="false" aria-controls="filterPanel">
@@ -338,6 +352,17 @@ const isFiltered = () => !!VIEW.include && VIEW.include.size < allProps().length
    rebuild (nothing about them is baked into the page) but they do not follow the
    viewer to another device, and another viewer sees their own. Sharing a group
    means sharing the URL, which encodes the selection. */
+/* ---- month selection ----
+   [start, end] inclusive indices into P.months; start===end is a single month.
+   Charts keep every month and dim what is outside this window; every NUMBER -
+   headline, tiles, rankings, table, CSV - covers only the selection. */
+let MSEL = null;                       // set once P is known
+const mAll = () => [0, P.months.length - 1];
+const mFiltered = () => MSEL && (MSEL[0] !== 0 || MSEL[1] !== P.months.length - 1);
+const mLabel = () => MSEL[0] === MSEL[1]
+  ? `${P.months[MSEL[0]]} ${P.year}`
+  : `${P.months[MSEL[0]]}\u2013${P.months[MSEL[1]]} ${P.year}`;
+
 const GKEY = "taglyz.groups.v1";
 function loadGroups() {
   try { return JSON.parse(localStorage.getItem(GKEY)) || []; } catch (_) { return []; }
@@ -376,7 +401,13 @@ function seriesFor(name) {
       for (const lab in m.income) (s.lines["+" + lab] = s.lines["+" + lab] || zeros())[i] += m.income[lab];
     }
   }
-  s.ytd = k => Math.round(sum(s[k]) * 100) / 100;
+  // Full-length arrays stay intact for the charts; every total respects MSEL.
+  const [a, b] = MSEL || [0, n - 1];
+  s.range = () => [a, b];
+  s.nMonths = () => b - a + 1;
+  s.selMonths = () => s.months.slice(a, b + 1);
+  s.slice = k => s[k].slice(a, b + 1);
+  s.ytd = k => Math.round(sum(s.slice(k)) * 100) / 100;
   return s;
 }
 
@@ -391,18 +422,27 @@ function chartIncomeExpense(svg, s) {
     el("line", { x1: m.l, x2: m.l + pw, y1: y(t), y2: y(t), class: t === 0 ? "baseline" : "gridline" }, svg);
     el("text", { x: m.l - 9, y: y(t) + 4, class: "tick", "text-anchor": "end" }, svg).textContent = compact(t);
   });
+  const [ra, rb] = s.range();
   const band = pw / s.months.length, gap = 2, bw = Math.min(24, (band - 16 - gap) / 2);
   s.months.forEach((mo, i) => {
     const cx = m.l + band * i + band / 2, x0 = cx - bw - gap / 2;
+    const on = i >= ra && i <= rb;
+    const g = el("g", { class: on ? "" : "dim" }, svg);
     [["income", "--series-1", x0], ["expenses", "--series-2", x0 + bw + gap]].forEach(([k, cv, x]) => {
       const v = s[k][i];
-      const p = el("path", { d: colPath(x, y(v), bw, (v / top) * ph, 4), fill: cssv(cv) }, svg);
-      attachTip(p, () => `<div class="t">${mo}</div>`
-        + tipRow(cssv("--series-1"), "Income", money2(s.income[i]))
-        + tipRow(cssv("--series-2"), "Expenses", money2(s.expenses[i]))
-        + tipRow("transparent", "NOI", money2(s.noi[i])));
+      el("path", { d: colPath(x, y(v), bw, (v / top) * ph, 4), fill: cssv(cv) }, g);
     });
-    el("text", { x: cx, y: H - m.b + 18, class: "xlab", "text-anchor": "middle" }, svg).textContent = mo;
+    el("text", { x: cx, y: H - m.b + 18, class: "xlab" + (on && mFiltered() ? " on" : "") }, svg).textContent = mo;
+    // Click a column to focus that month (and again to clear) - the chart doubles
+    // as a shortcut for the chip row above it.
+    const hit = el("rect", { x: m.l + band * i, y: m.t, width: band, height: ph,
+      fill: "transparent", style: "cursor:pointer" }, svg);
+    attachTip(hit, () => `<div class="t">${mo}</div>`
+      + tipRow(cssv("--series-1"), "Income", money2(s.income[i]))
+      + tipRow(cssv("--series-2"), "Expenses", money2(s.expenses[i]))
+      + tipRow("transparent", "NOI", money2(s.noi[i]))
+      + `<div class="r" style="margin-top:5px"><span class="nm">Click to focus ${mo}</span></div>`);
+    hit.addEventListener("click", () => setMonths(ra === i && rb === i ? mAll() : [i, i]));
   });
 }
 
@@ -423,16 +463,26 @@ function chartNoiCash(svg, s) {
     el("text", { x: m.l - 9, y: y(t) + 4, class: "tick", "text-anchor": "end" }, svg).textContent = compact(t);
   });
   s.months.forEach((mo, i) => el("text", { x: x(i), y: H - m.b + 18, class: "xlab", "text-anchor": "middle" }, svg).textContent = mo);
+  const [ra, rb] = s.range();
   const ser = [["noi", "--series-1"], ["cashflow", "--series-2"]];
+  const path = (k, from, to) => s[k].slice(from, to + 1)
+    .map((v, j) => (j ? "L" : "M") + x(from + j) + " " + y(v)).join(" ");
   ser.forEach(([k, cv]) => {
-    const d = s[k].map((v, i) => (i ? "L" : "M") + x(i) + " " + y(v)).join(" ");
-    el("path", { d, fill: "none", stroke: cssv(cv), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    if (mFiltered()) {
+      // the whole year stays on screen, recessive; the window is drawn over it
+      el("path", { d: path(k, 0, s.months.length - 1), fill: "none", stroke: cssv(cv),
+        "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", class: "dim" }, svg);
+    }
+    el("path", { d: path(k, ra, rb), fill: "none", stroke: cssv(cv), "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
   });
-  ser.forEach(([k, cv]) => s[k].forEach((v, i) =>
-    el("circle", { cx: x(i), cy: y(v), r: 4, fill: cssv(cv), stroke: cssv("--surface-1"), "stroke-width": 2 }, svg)));
-  const last = s.months.length - 1;
-  el("text", { x: x(last) + 10, y: y(s.noi[last]) + 4, class: "dlab" }, svg).textContent = compact(s.noi[last]);
-  el("text", { x: x(last) + 10, y: y(s.cashflow[last]) + 4, class: "dlab" }, svg).textContent = compact(s.cashflow[last]);
+  ser.forEach(([k, cv]) => s[k].forEach((v, i) => {
+    const on = i >= ra && i <= rb;
+    el("circle", { cx: x(i), cy: y(v), r: on ? 4 : 3, fill: cssv(cv),
+      stroke: cssv("--surface-1"), "stroke-width": 2, class: on ? "" : "dim" }, svg);
+  }));
+  el("text", { x: x(rb) + 10, y: y(s.noi[rb]) + 4, class: "dlab" }, svg).textContent = compact(s.noi[rb]);
+  el("text", { x: x(rb) + 10, y: y(s.cashflow[rb]) + 4, class: "dlab" }, svg).textContent = compact(s.cashflow[rb]);
   s.months.forEach((mo, i) => {
     const bw = pw / (s.months.length - 1);
     const hit = el("rect", { x: Math.max(m.l - 4, x(i) - bw / 2), y: m.t - 10, width: bw, height: ph + 20, fill: "transparent", style: "cursor:crosshair" }, svg);
@@ -483,9 +533,12 @@ function chartExpenseMix(svg, s) {
     el("line", { x1: m.l, x2: m.l + pw, y1: y(t), y2: y(t), class: t === 0 ? "baseline" : "gridline" }, svg);
     el("text", { x: m.l - 10, y: y(t) + 4, class: "tick", "text-anchor": "end" }, svg).textContent = compact(t);
   });
+  const [ra, rb] = s.range();
   const band = pw / s.months.length, bw = Math.min(24, band * 0.34);
   s.months.forEach((mo, i) => {
     const cx = m.l + band * i + band / 2, x = cx - bw / 2;
+    const on = i >= ra && i <= rb;
+    const col = el("g", { class: on ? "" : "dim" }, svg);
     let acc = 0;
     GROUP_NAMES.forEach((g, gi) => {
       const v = s.groups[g][i];
@@ -493,10 +546,10 @@ function chartExpenseMix(svg, s) {
       const yTop = y(acc + v), yBot = y(acc);
       const h = Math.max(0, yBot - yTop - (acc > 0 ? 2 : 0));
       const d = gi === GROUP_NAMES.length - 1 ? colPath(x, yTop, bw, h, 4) : `M${x} ${yTop} h${bw} v${h} h${-bw} Z`;
-      el("path", { d, fill: cssv(GROUP_VAR[gi]) }, svg);
+      el("path", { d, fill: cssv(GROUP_VAR[gi]) }, col);
       acc += v;
     });
-    el("text", { x: cx, y: H - m.b + 18, class: "xlab", "text-anchor": "middle" }, svg).textContent = mo;
+    el("text", { x: cx, y: H - m.b + 18, class: "xlab" + (on && mFiltered() ? " on" : ""), "text-anchor": "middle" }, svg).textContent = mo;
     const hit = el("rect", { x: m.l + band * i, y: m.t, width: band, height: ph, fill: "transparent" }, svg);
     attachTip(hit, () => `<div class="t">${mo}</div>`
       + GROUP_NAMES.map((g, gi) => tipRow(cssv(GROUP_VAR[gi]), g, money2(s.groups[g][i]))).join("")
@@ -537,7 +590,7 @@ function chartRanking(svg, rows, onPick) {
       "text-anchor": positive ? "start" : "end"
     }, svg).textContent = money(r.value);
     attachTip(hit, () => `<div class="t">${r.name}</div>`
-      + tipRow(positive ? posC : negC, "Cash flow YTD", money2(r.value))
+      + tipRow(positive ? posC : negC, mFiltered() ? "Cash flow" : "Cash flow YTD", money2(r.value))
       + tipRow("transparent", "NOI", money2(r.noi))
       + tipRow("transparent", "Debt service", money2(r.debt))
       + tipRow("transparent", "NOI margin", r.margin)
@@ -551,8 +604,10 @@ function chartRanking(svg, rows, onPick) {
 /* ============================ table ============================ */
 function tableRows(s) {
   const incLabels = Object.keys(s.lines).filter(k => k[0] === "+");
+  const [ra, rb] = s.range();
+  const win = arr => sum(arr.slice(ra, rb + 1));
   const expLabels = Object.keys(s.lines).filter(k => k[0] !== "+")
-    .filter(k => sum(s.lines[k]) !== 0).sort((a, b) => sum(s.lines[b]) - sum(s.lines[a]));
+    .filter(k => win(s.lines[k]) !== 0).sort((a, b) => win(s.lines[b]) - win(s.lines[a]));
   const rows = [["section", "Income"]];
   incLabels.forEach(k => rows.push(["item", k.slice(1), s.lines[k]]));
   rows.push(["total", "Total income", s.income], ["section", "Operating expenses"]);
@@ -560,17 +615,21 @@ function tableRows(s) {
   rows.push(["total", "Total operating expenses (as subtotaled)", s.expenses],
     ["section", ""], ["total", "Net operating income", s.noi],
     ["item", "Debt service", s.debt], ["total", "Cash flow after debt", s.cashflow]);
-  if (sum(s.capex) !== 0) rows.push(["item", "Capital improvements", s.capex]);
+  if (win(s.capex) !== 0) rows.push(["item", "Capital improvements", s.capex]);
   return rows;
 }
 
 function tableFor(s) {
   const rows = tableRows(s);
-  let h = "<thead><tr><th>Line</th>" + s.months.map(m => `<th>${m}</th>`).join("") + "<th>YTD</th></tr></thead><tbody>";
+  const [a, b] = s.range();
+  const totalCol = mFiltered() ? (s.nMonths() === 1 ? "Total" : "Period") : "YTD";
+  let h = "<thead><tr><th>Line</th>" + s.selMonths().map(m => `<th>${m}</th>`).join("") +
+    `<th>${totalCol}</th></tr></thead><tbody>`;
   rows.forEach(r => {
-    if (r[0] === "section") { h += `<tr class="section"><td colspan="${s.months.length + 2}">${esc(r[1])}</td></tr>`; return; }
+    if (r[0] === "section") { h += `<tr class="section"><td colspan="${s.nMonths() + 2}">${esc(r[1])}</td></tr>`; return; }
+    const vals = r[2].slice(a, b + 1);
     h += `<tr class="${r[0] === "total" ? "total" : ""}"><td class="${r[0] === "item" ? "indent" : ""}">${esc(r[1])}</td>`
-      + r[2].map(v => `<td>${money2(v)}</td>`).join("") + `<td>${money2(sum(r[2]))}</td></tr>`;
+      + vals.map(v => `<td>${money2(v)}</td>`).join("") + `<td>${money2(sum(vals))}</td></tr>`;
   });
   return `<div class="tabletools">
       <button type="button" class="dlbtn" data-download="csv">&#8595; Download CSV</button>
@@ -597,7 +656,9 @@ function buildCSV(s, title) {
     L.push(["Included", inc.join("; ")]);
     if (excluded.length) L.push(["Excluded", excluded.join("; ")]);
   }
-  L.push(["Period", `${s.months[0]}-${P.throughMonth} ${P.year}`]);
+  L.push(["Period", s.nMonths() === 1 ? `${s.selMonths()[0]} ${P.year}`
+    : `${s.selMonths()[0]}-${s.selMonths()[s.nMonths() - 1]} ${P.year}`]);
+  if (mFiltered()) L.push(["Scope", `A month selection is active. This export covers ${s.nMonths()} of ${s.months.length} months in the source workbook.`]);
   L.push(["Source", META.source]);
   L.push(["Basis", "Accrual. Figures as reported in the source workbook."]);
   const variance = s.ytd("variance");
@@ -606,21 +667,25 @@ function buildCSV(s, title) {
       `${money2(variance)} in total. Counting it, operating expenses are ${money2(s.ytd("expensesRecorded"))}.`]);
   }
   L.push([]);
-  L.push(["Line", ...s.months, "YTD"]);
+  const [ca, cb] = s.range();
+  L.push(["Line", ...s.selMonths(), mFiltered() ? "Total" : "YTD"]);
   tableRows(s).forEach(r => {
     if (r[0] === "section") { if (r[1]) L.push([]), L.push([r[1]]); return; }
-    L.push([r[1], ...r[2].map(v => v.toFixed(2)), sum(r[2]).toFixed(2)]);
+    const vals = r[2].slice(ca, cb + 1);
+    L.push([r[1], ...vals.map(v => v.toFixed(2)), sum(vals).toFixed(2)]);
   });
   return L.map(row => row.map(csvEscape).join(",")).join("\r\n");
 }
 
 function downloadCSV(btn) {
   const s = VIEW.type === "portfolio" ? seriesFor("__ALL__") : seriesFor(VIEW.label);
-  const title = VIEW.type === "portfolio"
+  const title = (VIEW.type === "portfolio"
     ? VIEW.label + (isFiltered() ? ` (${includedProps().length} of ${allProps().length} properties)` : "")
-    : VIEW.label;
+    : VIEW.label) + (mFiltered() ? ` — ${mLabel()}` : "");
   const slug = (VIEW.label || "portfolio").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const name = `TAGLYZ-${slug}-${s.months[0]}-${P.throughMonth}-${P.year}.csv`;
+  const sm = s.selMonths();
+  const span = sm.length === 1 ? sm[0] : `${sm[0]}-${sm[sm.length - 1]}`;
+  const name = `TAGLYZ-${slug}-${span}-${P.year}.csv`;
   // \uFEFF: without the BOM Excel reads the file as the local codepage and mangles
   // the non-ASCII characters in the note lines.
   const blob = new Blob(["\uFEFF" + buildCSV(s, title)], { type: "text/csv;charset=utf-8" });
@@ -642,31 +707,38 @@ function kpiTiles(s) {
   const inc = s.ytd("income"), exp = s.ytd("expenses"), noi = s.ytd("noi");
   const debt = s.ytd("debt"), cash = s.ytd("cashflow"), capex = s.ytd("capex");
   const dscr = debt ? (noi / debt) : 0;
-  const negMonths = s.cashflow.filter(v => v < 0).length;
+  const negMonths = s.slice("cashflow").filter(v => v < 0).length;
+  const n = s.nMonths();
   return `<section class="tiles">
     <div class="tile"><div class="l">Total income</div><div class="v">${money(inc)}</div><div class="d">${money(s.ytd("rent"))} of it rent</div></div>
     <div class="tile"><div class="l">Operating expenses</div><div class="v">${money(exp)}</div><div class="d">${inc ? (exp / inc * 100).toFixed(1) : 0}% of income</div></div>
-    <div class="tile"><div class="l">Debt service</div><div class="v">${money(debt)}</div><div class="d">${money(debt / s.months.length)} a month avg</div></div>
-    <div class="tile"><div class="l">Cash flow after debt</div><div class="v ${cash >= 0 ? "pos" : "neg"}">${money(cash)}</div><div class="d">${negMonths} of ${s.months.length} months negative</div></div>
+    <div class="tile"><div class="l">Debt service</div><div class="v">${money(debt)}</div><div class="d">${n === 1 ? "mortgage payments" : money(debt / n) + " a month avg"}</div></div>
+    <div class="tile"><div class="l">Cash flow after debt</div><div class="v ${cash >= 0 ? "pos" : "neg"}">${money(cash)}</div><div class="d">${n === 1 ? (cash >= 0 ? "positive this month" : "negative this month") : negMonths + " of " + n + " months negative"}</div></div>
     <div class="tile"><div class="l">Debt service coverage</div><div class="v">${dscr.toFixed(2)}&times;</div><div class="d">NOI &divide; debt service</div></div>
-    <div class="tile"><div class="l">Capital improvements</div><div class="v">${money(capex)}</div><div class="d">${capex ? "outside NOI" : "none booked YTD"}</div></div>
+    <div class="tile"><div class="l">Capital improvements</div><div class="v">${money(capex)}</div><div class="d">${capex ? "outside NOI" : "none booked"}</div></div>
   </section>`;
 }
 
 function heroFor(s, label) {
   const noi = s.ytd("noi"), inc = s.ytd("income");
-  const best = s.noi.indexOf(Math.max(...s.noi)), worst = s.noi.indexOf(Math.min(...s.noi));
+  const [a] = s.range(), n = s.nMonths();
+  const selNoi = s.slice("noi"), selM = s.selMonths();
+  const best = selNoi.indexOf(Math.max(...selNoi)), worst = selNoi.indexOf(Math.min(...selNoi));
+  const period = mFiltered() ? mLabel() : "year to date";
+  const side = n === 1
+    ? `<div><div class="l">Income</div><div class="v">${compact(inc)}</div></div>
+       <div><div class="l">Operating expenses</div><div class="v">${compact(s.ytd("expenses"))}</div></div>
+       <div><div class="l">Cash flow after debt</div><div class="v ${s.ytd("cashflow") >= 0 ? "pos" : "neg"}">${compact(s.ytd("cashflow"))}</div></div>`
+    : `<div><div class="l">Best month</div><div class="v">${selM[best]} · ${compact(selNoi[best])}</div></div>
+       <div><div class="l">Weakest month</div><div class="v">${selM[worst]} · ${compact(selNoi[worst])}</div></div>
+       <div><div class="l">Monthly average</div><div class="v">${compact(noi / n)}</div></div>`;
   return `<section class="hero">
     <div>
-      <div class="label">${label}, year to date</div>
+      <div class="label">${label}${mFiltered() ? " · " : ", "}${period}</div>
       <div class="value">${money(noi)}</div>
-      <div class="heronote">${inc ? (noi / inc * 100).toFixed(1) : 0}% NOI margin on ${money(inc)} of income · ${s.months.length} months</div>
+      <div class="heronote">${inc ? (noi / inc * 100).toFixed(1) : 0}% NOI margin on ${money(inc)} of income · ${n} month${n === 1 ? "" : "s"}</div>
     </div>
-    <div class="hero-side">
-      <div><div class="l">Best month</div><div class="v">${s.months[best]} · ${compact(s.noi[best])}</div></div>
-      <div><div class="l">Weakest month</div><div class="v">${s.months[worst]} · ${compact(s.noi[worst])}</div></div>
-      <div><div class="l">Monthly average</div><div class="v">${compact(noi / s.months.length)}</div></div>
-    </div>
+    <div class="hero-side">${side}</div>
   </section>`;
 }
 
@@ -687,7 +759,8 @@ const LEGEND_MIX = `<div class="legend">` + GROUP_NAMES.map((g, i) =>
 function varianceNote(s) {
   const v = s.ytd("variance");
   if (Math.abs(v) < 1) return "";
-  const bad = s.months.filter((m, i) => Math.abs(s.variance[i]) > 0.01);
+  const [ra] = s.range();
+  const bad = s.selMonths().filter((m, i) => Math.abs(s.variance[ra + i]) > 0.01);
   return `<div class="note"><b>A subtotal discrepancy in the source workbook.</b>
     The expense subtotal excludes an insurance amount that is recorded in the same column in
     <b>${bad.join(", ")}</b> — ${money2(v)} in total. Every figure here follows the workbook as reported.
@@ -700,6 +773,10 @@ function scopeLabel() {
   const n = includedProps().length;
   return isFiltered() ? `across the ${n} selected propert${n === 1 ? "y" : "ies"}` : "across all properties";
 }
+/* Charts keep every month on screen, so their captions say so explicitly - a dimmed
+   column is easy to misread as "no data" rather than "outside your selection". */
+const monthNote = () => mFiltered()
+  ? ` ${mLabel()} highlighted; the rest of the year stays for context.` : "";
 
 function renderPortfolio() {
   const props = includedProps();
@@ -724,21 +801,21 @@ function renderPortfolio() {
   document.getElementById("viewTitle").textContent = VIEW.label;
   document.getElementById("viewSub").textContent =
     (isFiltered() ? `${props.length} of ${total} properties` : `${total} properties`) +
-    ` · ${P.months[0]}–${P.throughMonth} ${P.year} · accrual basis` +
+    ` · ${mFiltered() ? mLabel() : P.months[0] + "\u2013" + P.throughMonth + " " + P.year} · accrual basis` +
     (excluded.length && excluded.length <= 4 ? ` · excluding ${excluded.join(", ")}` : "");
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Portfolio net operating income") + kpiTiles(s) +
     `<div class="grid2">
-      ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.`, LEGEND_IE, "cIE", "0 0 520 300")}
-      ${chartCard("NOI and cash flow after debt service", `Monthly, ${scopeLabel()}.`, LEGEND_NC, "cNC", "0 0 520 300")}
+      ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
+      ${chartCard("NOI and cash flow after debt service", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_NC, "cNC", "0 0 520 300")}
     </div>` +
     chartCard("Cash flow after debt service, by property",
-      `Year to date. ${winners} of ${props.length} ${isFiltered() ? "selected " : ""}properties are cash-flow positive after debt. Click any row to open it.`,
+      `${mFiltered() ? mLabel() : "Year to date"}. ${winners} of ${props.length} ${isFiltered() ? "selected " : ""}properties are cash-flow positive after debt. Click any row to open it.`,
       `<div class="legend"><span><i class="key" style="background:var(--pos)"></i>Positive</span><span><i class="key" style="background:var(--negb)"></i>Negative</span></div>`,
       "cRank", "0 0 1040 400") +
-    chartCard("Expense mix, month by month", `Recorded line items, grouped, ${scopeLabel()}.`, LEGEND_MIX, "cMix", "0 0 1040 320") +
-    chartCard("Operating spend by category", `Year-to-date totals ${scopeLabel()}.`, "", "cBars", "0 0 1040 400") +
+    chartCard("Expense mix, month by month", `Recorded line items, grouped, ${scopeLabel()}.${monthNote()}`, LEGEND_MIX, "cMix", "0 0 1040 320") +
+    chartCard("Operating spend by category", `${mFiltered() ? mLabel() : "Year-to-date"} totals ${scopeLabel()}.`, "", "cBars", "0 0 1040 400") +
     varianceNote(s) +
     `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s)}</details>`;
 
@@ -754,15 +831,15 @@ function renderProperty(name) {
   const entity = Object.keys(P.entities).find(e => P.entities[e].includes(name)) || "";
   document.getElementById("viewTitle").textContent = name;
   document.getElementById("viewSub").textContent =
-    `${entity ? entity + " · " : ""}${P.months[0]}–${P.throughMonth} ${P.year} · accrual basis`;
+    `${entity ? entity + " · " : ""}${mFiltered() ? mLabel() : P.months[0] + "\u2013" + P.throughMonth + " " + P.year} · accrual basis`;
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Net operating income") + kpiTiles(s) +
     `<div class="grid2">
-      ${chartCard("Income vs. operating expenses", "Monthly, in dollars.", LEGEND_IE, "cIE", "0 0 520 300")}
-      ${chartCard("NOI and cash flow after debt service", "Monthly. Cash flow is NOI less mortgage payments.", LEGEND_NC, "cNC", "0 0 520 300")}
+      ${chartCard("Income vs. operating expenses", `Monthly, in dollars.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
+      ${chartCard("NOI and cash flow after debt service", `Monthly. Cash flow is NOI less mortgage payments.${monthNote()}`, LEGEND_NC, "cNC", "0 0 520 300")}
     </div>` +
-    chartCard("Where the operating spend went", "Year-to-date total by category, as recorded on each line.", "", "cBars", "0 0 1040 400") +
+    chartCard("Where the operating spend went", `${mFiltered() ? mLabel() : "Year-to-date"} total by category, as recorded on each line.`, "", "cBars", "0 0 1040 400") +
     chartCard("Expense mix, month by month", "Fixed costs against the variable ones.", LEGEND_MIX, "cMix", "0 0 1040 320") +
     varianceNote(s) +
     `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s)}</details>`;
@@ -775,6 +852,40 @@ function renderProperty(name) {
 
 /* ============================ filter UI ============================ */
 const $ = id => document.getElementById(id);
+
+/* ---- month chips ---- */
+function setMonths(range) {
+  MSEL = range;
+  writeHash();
+  renderMonths();
+  draw();
+}
+function renderMonths() {
+  const [a, b] = MSEL, last = P.months.length - 1;
+  const all = !mFiltered();
+  $("monthRow").innerHTML =
+    `<button type="button" class="mchip" data-all="1" aria-pressed="${all}">Year to date</button>
+     <span class="sep"></span>` +
+    P.months.map((mo, i) => {
+      const single = a === b && i === a;
+      const inRange = !all && !single && i >= a && i <= b;
+      return `<button type="button" class="mchip${inRange ? " inrange" : ""}" data-i="${i}"
+        aria-pressed="${single}">${mo}</button>`;
+    }).join("") +
+    (all ? `<span class="hint">shift-click for a range</span>` : "");
+}
+$("monthRow").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  if (btn.dataset.all) return setMonths(mAll());
+  const i = +btn.dataset.i;
+  if (e.shiftKey) {
+    const anchor = MSEL[0];
+    setMonths([Math.min(anchor, i), Math.max(anchor, i)]);
+  } else {
+    setMonths(MSEL[0] === i && MSEL[1] === i ? mAll() : [i, i]);
+  }
+});
 
 function setInclude(set, label, type) {
   VIEW.include = set ? new Set(set) : null;
@@ -939,13 +1050,23 @@ function openGroup(g) {
 
 /* ============================ routing ============================ */
 function writeHash() {
-  let h = "";
-  if (VIEW.type === "property") h = encodeURIComponent(VIEW.label);
-  else if (isFiltered()) h = "g=" + includedProps().map(encodeURIComponent).join(",");
+  const parts = [];
+  if (VIEW.type === "property") parts.push(encodeURIComponent(VIEW.label));
+  else if (isFiltered()) parts.push("g=" + includedProps().map(encodeURIComponent).join(","));
+  if (mFiltered()) parts.push("m=" + MSEL[0] + "-" + MSEL[1]);
+  const h = parts.join("&");
   history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
 }
 function readHash() {
-  const raw = location.hash.slice(1);
+  const all = location.hash.slice(1).split("&");
+  const last = P.months.length - 1;
+  MSEL = mAll();
+  const mPart = all.find(p => p.startsWith("m="));
+  if (mPart) {
+    const [a, b] = mPart.slice(2).split("-").map(Number);
+    if (Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b <= last && a <= b) MSEL = [a, b];
+  }
+  const raw = all.find(p => !p.startsWith("m=")) || "";
   if (!raw) { setInclude(null, "Portfolio"); return; }
   if (raw.startsWith("g=")) {
     const props = raw.slice(2).split(",").map(decodeURIComponent).filter(p => P.properties[p]);
@@ -1018,14 +1139,17 @@ function pick(v) {
 function draw() {
   hideTip();
   updateFilterUI();
+  $("monthRow").hidden = false;
   if (VIEW.type === "portfolio") renderPortfolio(); else renderProperty(VIEW.label);
 }
 
 /* ============================ app ============================ */
 function boot() {
   initGroups();
+  MSEL = mAll();
   GROUPS = loadGroups();
   readHash();
+  renderMonths();
   syncSelector();
   $("propSel").addEventListener("change", e => pick(e.target.value));
   addEventListener("hashchange", () => { readHash(); syncSelector(); draw(); });
