@@ -12,7 +12,7 @@
     --page:#f9f9f7; --surface-1:#fcfcfb;
     --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#898781;
     --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,0.10);
-    --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100;
+    --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100; --series-5:#e87ba4;
     --pos:#2a78d6; --negb:#d03b3b;
     --good:#006300; --critical:#d03b3b; --warning:#fab219;
     --hover:rgba(11,11,11,0.04);
@@ -22,7 +22,7 @@
     --page:#0d0d0d; --surface-1:#1a1a19;
     --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
     --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
-    --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500;
+    --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500; --series-5:#d55181;
     --pos:#3987e5; --negb:#d03b3b;
     --good:#0ca30c; --critical:#d03b3b; --warning:#fab219;
     --hover:rgba(255,255,255,0.06);
@@ -69,6 +69,19 @@
   .mchip.inrange { border-color:var(--series-1); color:var(--text-primary); }
   .monthrow .sep { width:1px; height:20px; background:var(--grid); margin:0 5px; }
   .monthrow .hint { font-size:12px; color:var(--text-muted); margin-left:4px; }
+
+  .adjbtn { font:inherit; font-size:12.5px; background:var(--surface-1); border:1px solid var(--border);
+    color:var(--text-secondary); border-radius:999px; padding:6px 8px 6px 14px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:10px; }
+  .adjbtn:hover { color:var(--text-primary); }
+  .adjbtn[aria-pressed="true"] { border-color:var(--series-5); color:var(--text-primary); }
+  .adjbtn .sw { width:30px; height:17px; border-radius:999px; background:var(--axis);
+    position:relative; transition:background .12s; flex:none; }
+  .adjbtn[aria-pressed="true"] .sw { background:var(--series-5); }
+  .adjbtn .sw::after { content:""; position:absolute; top:2px; left:2px; width:13px; height:13px;
+    border-radius:50%; background:#fff; transition:transform .12s; }
+  .adjbtn[aria-pressed="true"] .sw::after { transform:translateX(13px); }
+  .adjnote { font-size:12px; color:var(--text-muted); }
 
   /* ---------- property filter ---------- */
   .filterrow { display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; margin:0 0 16px; }
@@ -127,6 +140,8 @@
   .tile .l { color:var(--text-secondary); font-size:12.5px; }
   .tile .v { font-size:25px; font-weight:620; letter-spacing:-0.02em; margin-top:3px; }
   .tile .d { font-size:12px; color:var(--text-muted); margin-top:3px; }
+  .tile .was, .hero .was { font-size:11.5px; color:var(--text-muted); margin-top:7px;
+    padding-top:6px; border-top:1px dashed var(--grid); }
   .pos { color:var(--good); } .neg { color:var(--critical); }
 
   .card { background:var(--surface-1); border:1px solid var(--border); border-radius:14px;
@@ -216,6 +231,7 @@
     </div>
   </header>
   <div class="monthrow" id="monthRow" role="group" aria-label="Choose months"></div>
+  <div class="monthrow" id="adjRow"></div>
   <div class="filterrow" id="filterRow" hidden>
     <div class="filterwrap">
       <button class="filterbtn" id="filterBtn" type="button" aria-expanded="false" aria-controls="filterPanel">
@@ -334,8 +350,11 @@ const GROUP_OF = {};
 function initGroups() {
   for (const g in P.groups) for (const lab of P.groups[g]) GROUP_OF[lab] = g;
 }
-const GROUP_NAMES = ["Taxes & insurance", "Repairs & handyman", "Utilities", "Management & admin"];
-const GROUP_VAR = ["--series-1", "--series-2", "--series-3", "--series-4"];
+const GROUP_NAMES = ["Taxes & insurance", "Repairs & handyman", "Utilities", "Management & admin", "Capex reserve"];
+const GROUP_VAR = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5"];
+const RESERVE_LABEL = "Capex reserve (4% of rent)";
+// Only the four booked groups exist when the overlay is off.
+const activeGroups = () => ADJ ? GROUP_NAMES : GROUP_NAMES.slice(0, 4);
 
 /* ---- view model ----
    A portfolio view is a SET of properties. "All properties" is just the set of
@@ -362,6 +381,19 @@ const mFiltered = () => MSEL && (MSEL[0] !== 0 || MSEL[1] !== P.months.length - 
 const mLabel = () => MSEL[0] === MSEL[1]
   ? `${P.months[MSEL[0]]} ${P.year}`
   : `${P.months[MSEL[0]]}\u2013${P.months[MSEL[1]]} ${P.year}`;
+
+/* ---- capex reserve ----
+   An underwriting overlay, not a restatement of the books: 4% of rent set aside,
+   treated as an operating expense so it lands inside NOI and therefore inside the
+   coverage ratio. Every figure keeps an as-reported twin so the adjusted view can
+   never be mistaken for the workbook.
+
+   A vacancy allowance deliberately is NOT modelled here. The workbook reports rent
+   *collected*, so real vacancy is already deducted; a further percentage would be a
+   stress case on an already-net figure rather than a pro forma restatement, which
+   needs gross potential rent the workbook does not carry. */
+const RES_RATE = 0.04;
+let ADJ = true;
 
 const GKEY = "taglyz.groups.v1";
 function loadGroups() {
@@ -401,13 +433,25 @@ function seriesFor(name) {
       for (const lab in m.income) (s.lines["+" + lab] = s.lines["+" + lab] || zeros())[i] += m.income[lab];
     }
   }
+  // Allowance overlays, derived from rent. Kept as their own arrays so both the
+  // adjusted and the as-reported figure are always available side by side.
+  s.groups["Capex reserve"] = s.rent.map(r => r * RES_RATE);
+  s.reserve = s.rent.map(r => r * RES_RATE);
+  s.expensesAdj = s.expenses.map((v, i) => v + s.reserve[i]);
+  s.noiAdj = s.income.map((v, i) => v - s.expensesAdj[i]);
+  s.cashflowAdj = s.noiAdj.map((v, i) => v - s.debt[i]);
+  // arr() is what charts and totals read; raw() is always the workbook figure.
+  s.arr = k => (ADJ && s[k + "Adj"]) ? s[k + "Adj"] : s[k];
+
   // Full-length arrays stay intact for the charts; every total respects MSEL.
   const [a, b] = MSEL || [0, n - 1];
   s.range = () => [a, b];
   s.nMonths = () => b - a + 1;
   s.selMonths = () => s.months.slice(a, b + 1);
-  s.slice = k => s[k].slice(a, b + 1);
+  s.slice = k => s.arr(k).slice(a, b + 1);
+  s.sliceRaw = k => s[k].slice(a, b + 1);
   s.ytd = k => Math.round(sum(s.slice(k)) * 100) / 100;
+  s.raw = k => Math.round(sum(s.sliceRaw(k)) * 100) / 100;
   return s;
 }
 
@@ -416,7 +460,7 @@ function chartIncomeExpense(svg, s) {
   svg.innerHTML = "";
   const W = 520, H = 300, m = { t: 14, r: 14, b: 34, l: 56 };
   const pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const ticks = niceTicks(Math.max(...s.income, ...s.expenses), 8), top = ticks[ticks.length - 1];
+  const ticks = niceTicks(Math.max(...s.arr("income"), ...s.arr("expenses")), 8), top = ticks[ticks.length - 1];
   const y = v => m.t + ph - (v / top) * ph;
   ticks.forEach(t => {
     el("line", { x1: m.l, x2: m.l + pw, y1: y(t), y2: y(t), class: t === 0 ? "baseline" : "gridline" }, svg);
@@ -429,7 +473,7 @@ function chartIncomeExpense(svg, s) {
     const on = i >= ra && i <= rb;
     const g = el("g", { class: on ? "" : "dim" }, svg);
     [["income", "--series-1", x0], ["expenses", "--series-2", x0 + bw + gap]].forEach(([k, cv, x]) => {
-      const v = s[k][i];
+      const v = s.arr(k)[i];
       el("path", { d: colPath(x, y(v), bw, (v / top) * ph, 4), fill: cssv(cv) }, g);
     });
     el("text", { x: cx, y: H - m.b + 18, class: "xlab" + (on && mFiltered() ? " on" : "") }, svg).textContent = mo;
@@ -438,9 +482,10 @@ function chartIncomeExpense(svg, s) {
     const hit = el("rect", { x: m.l + band * i, y: m.t, width: band, height: ph,
       fill: "transparent", style: "cursor:pointer" }, svg);
     attachTip(hit, () => `<div class="t">${mo}</div>`
-      + tipRow(cssv("--series-1"), "Income", money2(s.income[i]))
-      + tipRow(cssv("--series-2"), "Expenses", money2(s.expenses[i]))
-      + tipRow("transparent", "NOI", money2(s.noi[i]))
+      + tipRow(cssv("--series-1"), "Income", money2(s.arr("income")[i]))
+      + tipRow(cssv("--series-2"), "Expenses", money2(s.arr("expenses")[i]))
+      + tipRow("transparent", "NOI", money2(s.arr("noi")[i]))
+      + (ADJ ? tipRow("transparent", "Before reserve", money2(s.noi[i])) : "")
       + `<div class="r" style="margin-top:5px"><span class="nm">Click to focus ${mo}</span></div>`);
     hit.addEventListener("click", () => setMonths(ra === i && rb === i ? mAll() : [i, i]));
   });
@@ -450,7 +495,7 @@ function chartNoiCash(svg, s) {
   svg.innerHTML = "";
   const W = 520, H = 300, m = { t: 20, r: 58, b: 34, l: 58 };
   const pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const all = s.noi.concat(s.cashflow);
+  const all = s.arr("noi").concat(s.arr("cashflow"));
   const lo = Math.min(0, ...all), hi = Math.max(0, ...all);
   const span = hi - lo || 1;
   const step = niceTicks(span, 6)[1] || 1;
@@ -465,7 +510,7 @@ function chartNoiCash(svg, s) {
   s.months.forEach((mo, i) => el("text", { x: x(i), y: H - m.b + 18, class: "xlab", "text-anchor": "middle" }, svg).textContent = mo);
   const [ra, rb] = s.range();
   const ser = [["noi", "--series-1"], ["cashflow", "--series-2"]];
-  const path = (k, from, to) => s[k].slice(from, to + 1)
+  const path = (k, from, to) => s.arr(k).slice(from, to + 1)
     .map((v, j) => (j ? "L" : "M") + x(from + j) + " " + y(v)).join(" ");
   ser.forEach(([k, cv]) => {
     if (mFiltered()) {
@@ -476,13 +521,13 @@ function chartNoiCash(svg, s) {
     el("path", { d: path(k, ra, rb), fill: "none", stroke: cssv(cv), "stroke-width": 2,
       "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
   });
-  ser.forEach(([k, cv]) => s[k].forEach((v, i) => {
+  ser.forEach(([k, cv]) => s.arr(k).forEach((v, i) => {
     const on = i >= ra && i <= rb;
     el("circle", { cx: x(i), cy: y(v), r: on ? 4 : 3, fill: cssv(cv),
       stroke: cssv("--surface-1"), "stroke-width": 2, class: on ? "" : "dim" }, svg);
   }));
-  el("text", { x: x(rb) + 10, y: y(s.noi[rb]) + 4, class: "dlab" }, svg).textContent = compact(s.noi[rb]);
-  el("text", { x: x(rb) + 10, y: y(s.cashflow[rb]) + 4, class: "dlab" }, svg).textContent = compact(s.cashflow[rb]);
+  el("text", { x: x(rb) + 10, y: y(s.arr("noi")[rb]) + 4, class: "dlab" }, svg).textContent = compact(s.arr("noi")[rb]);
+  el("text", { x: x(rb) + 10, y: y(s.arr("cashflow")[rb]) + 4, class: "dlab" }, svg).textContent = compact(s.arr("cashflow")[rb]);
   s.months.forEach((mo, i) => {
     const bw = pw / (s.months.length - 1);
     const hit = el("rect", { x: Math.max(m.l - 4, x(i) - bw / 2), y: m.t - 10, width: bw, height: ph + 20, fill: "transparent", style: "cursor:crosshair" }, svg);
@@ -490,20 +535,24 @@ function chartNoiCash(svg, s) {
     hit.addEventListener("mouseenter", () => { line = el("line", { x1: x(i), x2: x(i), y1: m.t - 6, y2: m.t + ph, stroke: cssv("--axis"), "stroke-width": 1 }, svg); });
     hit.addEventListener("mouseleave", () => { if (line) { line.remove(); line = null; } });
     attachTip(hit, () => `<div class="t">${mo}</div>`
-      + tipRow(cssv("--series-1"), "NOI", money2(s.noi[i]))
-      + tipRow(cssv("--series-2"), "Cash flow", money2(s.cashflow[i]))
-      + tipRow("transparent", "Debt service", money2(s.debt[i])));
+      + tipRow(cssv("--series-1"), "NOI", money2(s.arr("noi")[i]))
+      + tipRow(cssv("--series-2"), "Cash flow", money2(s.arr("cashflow")[i]))
+      + tipRow("transparent", "Debt service", money2(s.debt[i]))
+      + (ADJ ? tipRow("transparent", "Cash flow before reserve", money2(s.cashflow[i])) : ""));
   });
 }
 
 function chartExpenseBars(svg, s) {
   svg.innerHTML = "";
+  const [wa, wb] = s.range();
   const cats = Object.keys(s.lines).filter(k => k[0] !== "+")
-    .map(k => [k, sum(s.lines[k])]).filter(d => d[1] > 0).sort((a, b) => b[1] - a[1]);
+    .map(k => [k, sum(s.lines[k].slice(wa, wb + 1))])
+    .concat(ADJ ? [[RESERVE_LABEL, sum(s.reserve.slice(wa, wb + 1))]] : [])
+    .filter(d => d[1] > 0).sort((a, b) => b[1] - a[1]);
   const W = 1040, m = { t: 8, r: 120, b: 8, l: 200 }, rowH = 28;
   const H = m.t + cats.length * rowH + m.b;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const pw = W - m.l - m.r, max = cats[0] ? cats[0][1] : 1, c = cssv("--series-1");
+  const pw = W - m.l - m.r, max = cats[0] ? cats[0][1] : 1;
   const total = sum(cats.map(d => d[1]));
   el("line", { x1: m.l, x2: m.l, y1: m.t, y2: H - m.b, class: "baseline" }, svg);
   cats.forEach(([name, val], i) => {
@@ -512,13 +561,14 @@ function chartExpenseBars(svg, s) {
     const r = Math.min(4, w / 2);
     const d = w <= 0.5 ? `M${m.l} ${by} v${bh}` :
       `M${m.l} ${by} H${m.l + w - r} a${r} ${r} 0 0 1 ${r} ${r} v${bh - 2 * r} a${r} ${r} 0 0 1 ${-r} ${r} H${m.l} Z`;
+    const c = cssv(name === RESERVE_LABEL ? "--series-5" : "--series-1");
     el("path", { d, fill: c }, svg);
     el("text", { x: m.l + w + 10, y: by + bh / 2 + 4, class: "dlab" }, svg).textContent = money(val);
     const hit = el("rect", { x: m.l, y: yTop, width: pw + m.r, height: rowH, fill: "transparent" }, svg);
     attachTip(hit, () => `<div class="t">${name}</div>`
-      + tipRow(c, "YTD total", money2(val))
+      + tipRow(c, mFiltered() ? "Total" : "YTD total", money2(val))
       + tipRow("transparent", "Share", (val / total * 100).toFixed(1) + "%")
-      + tipRow("transparent", "Per month", money2(val / s.months.length)));
+      + tipRow("transparent", "Per month", money2(val / s.nMonths())));
   });
 }
 
@@ -526,7 +576,8 @@ function chartExpenseMix(svg, s) {
   svg.innerHTML = "";
   const W = 1040, H = 320, m = { t: 16, r: 16, b: 36, l: 72 };
   const pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const totals = s.months.map((_, i) => sum(GROUP_NAMES.map(g => s.groups[g][i])));
+  const GN = activeGroups();
+  const totals = s.months.map((_, i) => sum(GN.map(g => s.groups[g][i])));
   const ticks = niceTicks(Math.max(...totals), 8), top = ticks[ticks.length - 1];
   const y = v => m.t + ph - (v / top) * ph;
   ticks.forEach(t => {
@@ -540,20 +591,83 @@ function chartExpenseMix(svg, s) {
     const on = i >= ra && i <= rb;
     const col = el("g", { class: on ? "" : "dim" }, svg);
     let acc = 0;
-    GROUP_NAMES.forEach((g, gi) => {
+    GN.forEach((g, gi) => {
       const v = s.groups[g][i];
       if (v <= 0) return;
       const yTop = y(acc + v), yBot = y(acc);
       const h = Math.max(0, yBot - yTop - (acc > 0 ? 2 : 0));
-      const d = gi === GROUP_NAMES.length - 1 ? colPath(x, yTop, bw, h, 4) : `M${x} ${yTop} h${bw} v${h} h${-bw} Z`;
+      const d = gi === GN.length - 1 ? colPath(x, yTop, bw, h, 4) : `M${x} ${yTop} h${bw} v${h} h${-bw} Z`;
       el("path", { d, fill: cssv(GROUP_VAR[gi]) }, col);
       acc += v;
     });
     el("text", { x: cx, y: H - m.b + 18, class: "xlab" + (on && mFiltered() ? " on" : ""), "text-anchor": "middle" }, svg).textContent = mo;
     const hit = el("rect", { x: m.l + band * i, y: m.t, width: band, height: ph, fill: "transparent" }, svg);
     attachTip(hit, () => `<div class="t">${mo}</div>`
-      + GROUP_NAMES.map((g, gi) => tipRow(cssv(GROUP_VAR[gi]), g, money2(s.groups[g][i]))).join("")
+      + GN.map((g, gi) => tipRow(cssv(GROUP_VAR[gi]), g, money2(s.groups[g][i]))).join("")
       + tipRow("transparent", "Total", money2(totals[i])));
+  });
+}
+
+/* Waterfall: how gross rent becomes cash flow, one deduction at a time. This is
+   where the allowances stop being an invisible adjustment and become a step you
+   can point at. */
+function chartWaterfall(svg, s) {
+  svg.innerHTML = "";
+  const other = s.ytd("income") - s.ytd("rent");
+  const steps = [
+    ["Rental income", s.ytd("rent"), "up"],
+    ...(other > 0.5 ? [["Other income", other, "up"]] : []),
+    ["Operating expenses", -s.raw("expenses"), "down"],
+    ...(ADJ ? [[RESERVE_LABEL, -s.ytd("reserve"), "down"]] : []),
+    ["Net operating income", null, "total"],
+    ["Debt service", -s.ytd("debt"), "down"],
+    ["Cash flow after debt", null, "total"],
+  ];
+  // running balance; a "total" step is the balance so far, not a contribution
+  let run = 0;
+  const bars = steps.map(([label, v, kind]) => {
+    if (kind === "total") return { label, kind, from: 0, to: run, value: run };
+    const from = run; run += v;
+    return { label, kind, from, to: run, value: v };
+  });
+  const W = 1040, m = { t: 16, r: 20, b: 74, l: 60 };
+  const lo = Math.min(0, ...bars.flatMap(b => [b.from, b.to]));
+  const hi = Math.max(0, ...bars.flatMap(b => [b.from, b.to]));
+  const H = 340, pw = W - m.l - m.r, ph = H - m.t - m.b;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const y = v => m.t + ph - ((v - lo) / ((hi - lo) || 1)) * ph;
+  const step = niceTicks(hi - lo, 6)[1] || 1;
+  for (let t = Math.ceil(lo / step) * step; t <= hi + step * 0.001; t += step) {
+    el("line", { x1: m.l, x2: m.l + pw, y1: y(t), y2: y(t),
+      class: Math.abs(t) < 1e-9 ? "baseline" : "gridline" }, svg);
+    el("text", { x: m.l - 9, y: y(t) + 4, class: "tick", "text-anchor": "end" }, svg).textContent = compact(t);
+  }
+  const band = pw / bars.length, bw = Math.min(58, band * 0.6);
+  bars.forEach((b, i) => {
+    const cx = m.l + band * i + band / 2, x = cx - bw / 2;
+    const top = Math.min(y(b.from), y(b.to)), h = Math.max(2, Math.abs(y(b.to) - y(b.from)));
+    const fill = b.kind === "total" ? cssv("--axis")
+      : b.kind === "up" ? cssv("--series-1") : cssv("--negb");
+    el("path", { d: colPath(x, top, bw, h, 4), fill }, svg);
+    if (i < bars.length - 1) {
+      el("line", { x1: cx + bw / 2, x2: m.l + band * (i + 1) + band / 2 - bw / 2,
+        y1: y(b.to), y2: y(b.to), stroke: cssv("--axis"), "stroke-width": 1,
+        "stroke-dasharray": "3 3" }, svg);
+    }
+    el("text", { x: cx, y: top - 7, class: "dlab", "text-anchor": "middle" }, svg)
+      .textContent = b.kind === "total" ? money(b.value) : (b.value >= 0 ? "+" : "") + money(b.value);
+    // labels alternate rows so the long ones do not collide
+    const words = b.label.replace(/ \(.*\)/, "").split(" ");
+    const mid = Math.ceil(words.length / 2);
+    [words.slice(0, mid).join(" "), words.slice(mid).join(" ")].forEach((line, li) => {
+      if (!line) return;
+      el("text", { x: cx, y: H - m.b + 20 + li * 13 + (i % 2) * 26,
+        class: "xlab" + (b.kind === "total" ? " on" : ""), "text-anchor": "middle" }, svg).textContent = line;
+    });
+    const hit = el("rect", { x: m.l + band * i, y: m.t, width: band, height: ph, fill: "transparent" }, svg);
+    attachTip(hit, () => `<div class="t">${b.label}</div>`
+      + tipRow(fill, b.kind === "total" ? "Balance" : "Effect", money2(b.value))
+      + (b.kind === "total" ? "" : tipRow("transparent", "Running total", money2(b.to))));
   });
 }
 
@@ -610,11 +724,12 @@ function tableRows(s) {
     .filter(k => win(s.lines[k]) !== 0).sort((a, b) => win(s.lines[b]) - win(s.lines[a]));
   const rows = [["section", "Income"]];
   incLabels.forEach(k => rows.push(["item", k.slice(1), s.lines[k]]));
-  rows.push(["total", "Total income", s.income], ["section", "Operating expenses"]);
+  rows.push(["total", "Total income", s.arr("income")], ["section", "Operating expenses"]);
   expLabels.forEach(k => rows.push(["item", k, s.lines[k]]));
-  rows.push(["total", "Total operating expenses (as subtotaled)", s.expenses],
-    ["section", ""], ["total", "Net operating income", s.noi],
-    ["item", "Debt service", s.debt], ["total", "Cash flow after debt", s.cashflow]);
+  if (ADJ) rows.push(["item", RESERVE_LABEL, s.reserve]);
+  rows.push(["total", "Total operating expenses" + (ADJ ? "" : " (as subtotaled)"), s.arr("expenses")],
+    ["section", ""], ["total", "Net operating income", s.arr("noi")],
+    ["item", "Debt service", s.debt], ["total", "Cash flow after debt", s.arr("cashflow")]);
   if (win(s.capex) !== 0) rows.push(["item", "Capital improvements", s.capex]);
   return rows;
 }
@@ -660,7 +775,10 @@ function buildCSV(s, title) {
     : `${s.selMonths()[0]}-${s.selMonths()[s.nMonths() - 1]} ${P.year}`]);
   if (mFiltered()) L.push(["Scope", `A month selection is active. This export covers ${s.nMonths()} of ${s.months.length} months in the source workbook.`]);
   L.push(["Source", META.source]);
-  L.push(["Basis", "Accrual. Figures as reported in the source workbook."]);
+  L.push(["Basis", ADJ
+    ? `Accrual, with ${pctLabel()} applied as an operating expense. That reserve is an underwriting overlay, NOT a figure from the source workbook.`
+    : "Accrual. Figures as reported in the source workbook."]);
+  if (ADJ) L.push(["Before reserve", `NOI ${money2(s.raw("noi"))}, cash flow after debt ${money2(s.raw("cashflow"))}`]);
   const variance = s.ytd("variance");
   if (Math.abs(variance) >= 1) {
     L.push(["Note", `The source workbook's expense subtotals omit an insurance amount recorded in the same column; ` +
@@ -709,12 +827,14 @@ function kpiTiles(s) {
   const dscr = debt ? (noi / debt) : 0;
   const negMonths = s.slice("cashflow").filter(v => v < 0).length;
   const n = s.nMonths();
+  const was = k => ADJ ? `<div class="was">${money(s.raw(k))} before reserve</div>` : "";
+  const dscrRaw = debt ? s.raw("noi") / debt : 0;
   return `<section class="tiles">
-    <div class="tile"><div class="l">Total income</div><div class="v">${money(inc)}</div><div class="d">${money(s.ytd("rent"))} of it rent</div></div>
-    <div class="tile"><div class="l">Operating expenses</div><div class="v">${money(exp)}</div><div class="d">${inc ? (exp / inc * 100).toFixed(1) : 0}% of income</div></div>
+    <div class="tile"><div class="l">Total income</div><div class="v">${money(inc)}</div><div class="d">${money(s.ytd("rent"))} of it rent</div>${was("income")}</div>
+    <div class="tile"><div class="l">Operating expenses</div><div class="v">${money(exp)}</div><div class="d">${inc ? (exp / inc * 100).toFixed(1) : 0}% of income</div>${was("expenses")}</div>
     <div class="tile"><div class="l">Debt service</div><div class="v">${money(debt)}</div><div class="d">${n === 1 ? "mortgage payments" : money(debt / n) + " a month avg"}</div></div>
-    <div class="tile"><div class="l">Net operating income</div><div class="v ${noi >= 0 ? "" : "neg"}">${money(noi)}</div><div class="d">${inc ? (noi / inc * 100).toFixed(1) : 0}% margin on income</div></div>
-    <div class="tile"><div class="l">Debt service coverage</div><div class="v">${dscr.toFixed(2)}&times;</div><div class="d">NOI &divide; debt service</div></div>
+    <div class="tile"><div class="l">Net operating income</div><div class="v ${noi >= 0 ? "" : "neg"}">${money(noi)}</div><div class="d">${inc ? (noi / inc * 100).toFixed(1) : 0}% margin on income</div>${was("noi")}</div>
+    <div class="tile"><div class="l">Debt service coverage</div><div class="v">${dscr.toFixed(2)}&times;</div><div class="d">NOI &divide; debt service</div>${ADJ ? `<div class="was">${dscrRaw.toFixed(2)}&times; before reserve</div>` : ""}</div>
   </section>`;
 }
 
@@ -727,18 +847,21 @@ function heroFor(s, label) {
   const selCash = s.slice("cashflow"), selM = s.selMonths();
   const best = selCash.indexOf(Math.max(...selCash)), worst = selCash.indexOf(Math.min(...selCash));
   const period = mFiltered() ? mLabel() : "year to date";
-  const side = n === 1
+  const asRep = ADJ
+    ? `<div><div class="l">Before reserve</div><div class="v ${s.raw("cashflow") >= 0 ? "" : "neg"}">${compact(s.raw("cashflow"))}</div></div>`
+    : "";
+  const side = asRep + (n === 1
     ? `<div><div class="l">Income</div><div class="v">${compact(inc)}</div></div>
        <div><div class="l">Operating expenses</div><div class="v">${compact(s.ytd("expenses"))}</div></div>
        <div><div class="l">Net operating income</div><div class="v">${compact(noi)}</div></div>`
     : `<div><div class="l">Best month</div><div class="v">${selM[best]} · ${compact(selCash[best])}</div></div>
        <div><div class="l">Weakest month</div><div class="v">${selM[worst]} · ${compact(selCash[worst])}</div></div>
-       <div><div class="l">Monthly average</div><div class="v">${compact(cash / n)}</div></div>`;
+       <div><div class="l">Monthly average</div><div class="v">${compact(cash / n)}</div></div>`);
   return `<section class="hero">
     <div>
       <div class="label">${label}${mFiltered() ? " · " : ", "}${period}</div>
       <div class="value ${cash >= 0 ? "" : "neg"}">${money(cash)}</div>
-      <div class="heronote">${money(noi)} of net operating income${inc ? ` — a ${(noi / inc * 100).toFixed(1)}% margin` : ""} — less ${money(debt)} of debt service · ${n} month${n === 1 ? "" : "s"}</div>
+      <div class="heronote">${money(noi)} of net operating income${inc ? ` — a ${(noi / inc * 100).toFixed(1)}% margin` : ""} — less ${money(debt)} of debt service · ${n} month${n === 1 ? "" : "s"}${ADJ ? ` · after ${pctLabel()}` : ""}</div>
     </div>
     <div class="hero-side">${side}</div>
   </section>`;
@@ -755,7 +878,7 @@ const LEGEND_IE = `<div class="legend">
 const LEGEND_NC = `<div class="legend">
   <span><i class="key line" style="background:var(--series-1)"></i>Net operating income</span>
   <span><i class="key line" style="background:var(--series-2)"></i>Cash flow after debt</span></div>`;
-const LEGEND_MIX = `<div class="legend">` + GROUP_NAMES.map((g, i) =>
+const legendMix = () => `<div class="legend">` + activeGroups().map((g, i) =>
   `<span><i class="key" style="background:var(--${GROUP_VAR[i].slice(2)})"></i>${g}</span>`).join("") + `</div>`;
 
 function varianceNote(s) {
@@ -808,6 +931,7 @@ function renderPortfolio() {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Portfolio cash flow after debt") + kpiTiles(s) +
+    adjBanner(s) + varianceNote(s) +
     `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
@@ -817,13 +941,15 @@ function renderPortfolio() {
       `${mFiltered() ? mLabel() : "Year to date"}. ${winners} of ${props.length} ${isFiltered() ? "selected " : ""}properties are cash-flow positive after debt. Click any row to open it.`,
       `<div class="legend"><span><i class="key" style="background:var(--pos)"></i>Positive</span><span><i class="key" style="background:var(--negb)"></i>Negative</span></div>`,
       "cRank", "0 0 1040 400") +
-    chartCard("Expense mix, month by month", `Recorded line items, grouped, ${scopeLabel()}.${monthNote()}`, LEGEND_MIX, "cMix", "0 0 1040 320") +
+    chartCard("From rent to cash flow", `${mFiltered() ? mLabel() : "Year to date"}, ${scopeLabel()}. Each step is a deduction against the running balance.`, "", "cFall", "0 0 1040 340") +
+    chartCard("Expense mix, month by month", `Recorded line items, grouped, ${scopeLabel()}.${monthNote()}`, legendMix(), "cMix", "0 0 1040 320") +
     chartCard("Operating spend by category", `${mFiltered() ? mLabel() : "Year-to-date"} totals ${scopeLabel()}.`, "", "cBars", "0 0 1040 400") +
-    varianceNote(s);
+    "";
 
   chartIncomeExpense(document.getElementById("cIE"), s);
   chartNoiCash(document.getElementById("cNC"), s);
   chartRanking(document.getElementById("cRank"), rows, pick);
+  chartWaterfall(document.getElementById("cFall"), s);
   chartExpenseMix(document.getElementById("cMix"), s);
   chartExpenseBars(document.getElementById("cBars"), s);
 }
@@ -837,23 +963,56 @@ function renderProperty(name) {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Cash flow after debt") + kpiTiles(s) +
+    adjBanner(s) + varianceNote(s) +
     `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, in dollars.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
       ${chartCard("NOI and cash flow after debt service", `Monthly. Cash flow is NOI less mortgage payments.${monthNote()}`, LEGEND_NC, "cNC", "0 0 520 300")}
     </div>` +
+    chartCard("From rent to cash flow", `${mFiltered() ? mLabel() : "Year to date"}. Each step is a deduction against the running balance.`, "", "cFall", "0 0 1040 340") +
     chartCard("Where the operating spend went", `${mFiltered() ? mLabel() : "Year-to-date"} total by category, as recorded on each line.`, "", "cBars", "0 0 1040 400") +
-    chartCard("Expense mix, month by month", "Fixed costs against the variable ones.", LEGEND_MIX, "cMix", "0 0 1040 320") +
-    varianceNote(s);
+    chartCard("Expense mix, month by month", "Fixed costs against the variable ones.", legendMix(), "cMix", "0 0 1040 320") +
+    "";
 
   chartIncomeExpense(document.getElementById("cIE"), s);
   chartNoiCash(document.getElementById("cNC"), s);
+  chartWaterfall(document.getElementById("cFall"), s);
   chartExpenseBars(document.getElementById("cBars"), s);
   chartExpenseMix(document.getElementById("cMix"), s);
 }
 
 /* ============================ filter UI ============================ */
 const $ = id => document.getElementById(id);
+
+const pctLabel = () => `a ${(RES_RATE * 100).toFixed(0)}% capex reserve on rent`;
+
+function renderAdj() {
+  $("adjRow").innerHTML =
+    `<button type="button" class="adjbtn" id="adjBtn" aria-pressed="${ADJ}">
+       Capex reserve<span class="sw"></span></button>
+     <span class="adjnote">${ADJ ? "4% of rent, treated as an operating expense" : "showing the workbook as reported"}</span>`;
+}
+$("adjRow").addEventListener("click", e => {
+  if (!e.target.closest("#adjBtn")) return;
+  ADJ = !ADJ;
+  writeHash(); renderAdj(); draw();
+});
+
+/* A standing, unmissable statement of what basis the figures are on. Default-on
+   means the adjusted view is what a reader meets first, so it has to say so. */
+function adjBanner(s) {
+  if (!ADJ) return "";
+  return `<div class="note" style="border-left-color:var(--series-5)">
+    <b>A ${(RES_RATE * 100).toFixed(0)}% capex reserve is applied.</b> ${money2(s.ytd("reserve"))} is set aside over this
+    period and treated as an operating expense, so it lands inside both net operating income and the
+    coverage ratio. It is an underwriting assumption, <b>not</b> a figure from the accountant's workbook —
+    as reported, NOI is <b>${money2(s.raw("noi"))}</b> and cash flow after debt is
+    <b>${money2(s.raw("cashflow"))}</b>.
+    ${Math.abs(s.raw("capex")) > 1 ? `<br><br>Worth noting: <b>${money2(s.raw("capex"))}</b> of capital improvements were
+    actually booked over this period, against a ${money2(s.ytd("reserve"))} reserve. The reserve is an
+    alternative to that figure, never an addition to it — and actual spend running
+    ${(s.raw("capex") / s.ytd("rent") * 100).toFixed(1)}% of rent against a ${(RES_RATE * 100).toFixed(0)}% assumption is worth a look on its own.` : ""}</div>`;
+}
 
 /* ---- month chips ---- */
 function setMonths(range) {
@@ -1056,6 +1215,7 @@ function writeHash() {
   if (VIEW.type === "property") parts.push(encodeURIComponent(VIEW.label));
   else if (isFiltered()) parts.push("g=" + includedProps().map(encodeURIComponent).join(","));
   if (mFiltered()) parts.push("m=" + MSEL[0] + "-" + MSEL[1]);
+  if (!ADJ) parts.push("a=0");
   const h = parts.join("&");
   history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
 }
@@ -1063,12 +1223,13 @@ function readHash() {
   const all = location.hash.slice(1).split("&");
   const last = P.months.length - 1;
   MSEL = mAll();
+  ADJ = !all.includes("a=0");
   const mPart = all.find(p => p.startsWith("m="));
   if (mPart) {
     const [a, b] = mPart.slice(2).split("-").map(Number);
     if (Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b <= last && a <= b) MSEL = [a, b];
   }
-  const raw = all.find(p => !p.startsWith("m=")) || "";
+  const raw = all.find(p => !p.startsWith("m=") && !p.startsWith("a=")) || "";
   if (!raw) { setInclude(null, "Portfolio"); return; }
   if (raw.startsWith("g=")) {
     const props = raw.slice(2).split(",").map(decodeURIComponent).filter(p => P.properties[p]);
@@ -1152,6 +1313,7 @@ function boot() {
   GROUPS = loadGroups();
   readHash();
   renderMonths();
+  renderAdj();
   syncSelector();
   $("propSel").addEventListener("change", e => pick(e.target.value));
   addEventListener("hashchange", () => { readHash(); syncSelector(); draw(); });

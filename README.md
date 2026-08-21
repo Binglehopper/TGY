@@ -35,6 +35,26 @@ property ranking, table, CSV — covers only the months you picked. The trend ch
 keep the whole year on screen with unselected months dimmed, because a single
 month's figure is hard to judge without seeing what the other months looked like.
 
+### Capex reserve
+
+A toggle above the report applies a **4% capex reserve on rent**, treated as an
+operating expense so it lands inside net operating income and therefore inside the
+debt-service coverage ratio. It is **on by default**, and every figure it touches
+keeps its as-reported twin visible — the hero carries a "before reserve" stat, each
+tile carries the unadjusted number beneath it, and a standing note states that the
+reserve is an underwriting assumption rather than a figure from the workbook.
+Toggling it off is recorded in the URL (`a=0`), so a shared link keeps the basis it
+was read on.
+
+**A vacancy allowance is deliberately not modelled.** The workbook reports rent
+*collected*, so real vacancy is already deducted from it; applying a further
+percentage would be a stress case on an already-net figure rather than a pro forma
+restatement, which needs gross potential rent the workbook does not carry.
+
+Note that actual capital improvements are booked separately and have been running
+well above the 4% assumption — $151,843 against a $42,882 reserve for Jan–Jul 2026.
+The reserve is an alternative to that figure, never an addition to it.
+
 ### Properties
 
 The filter button opens a checkbox list of every property, grouped by entity, with
@@ -59,6 +79,10 @@ Month and property selections are both encoded in the URL
 will open the same way for anyone with the passphrase.
 
 ### Exporting
+
+The table sits directly under the headline figures, ahead of the charts, so the
+exact numbers are one click away rather than a scroll to the bottom. It stays
+collapsed by default.
 
 **Download CSV** at the top of the table section exports the current view. Values go
 out as raw numbers rather than the formatted strings on screen, so the file opens in
