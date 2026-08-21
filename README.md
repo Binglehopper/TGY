@@ -21,6 +21,51 @@ What it does not protect against: someone who has the passphrase. There is one
 passphrase for everyone, so treat it as a shared read credential — rotate it by
 rebuilding (below) whenever the audience changes.
 
+## Using the report
+
+### Months
+
+A chip row sits above everything: **Year to date** plus one chip per month. Click a
+month to focus it, shift-click a second for a range, click the active month again to
+return to the full year. Clicking a column in the income-vs-expenses chart does the
+same thing.
+
+Selecting a month **focuses** rather than filters. Every number — headline, tiles,
+property ranking, table, CSV — covers only the months you picked. The trend charts
+keep the whole year on screen with unselected months dimmed, because a single
+month's figure is hard to judge without seeing what the other months looked like.
+
+### Properties
+
+The filter button opens a checkbox list of every property, grouped by entity, with
+`only` links to isolate one entity and one-click **Select all / Clear all**. The
+entities also appear directly in the view dropdown as one-click roll-ups.
+
+Name any selection with **Save selection as a group** and it joins the dropdown.
+Saved groups live in `localStorage`, which makes them *per browser, per person*:
+they survive the monthly rebuild, but they do not follow you to another device, and
+another viewer sees their own. A group everyone sees by default would have to be
+baked into `template.html` instead.
+
+A filtered view always announces itself — the title changes, the subtitle reads
+"16 of 17 properties", included properties show as removable chips, and chart
+captions name the scope. A view showing a subset should never be mistakable for the
+whole portfolio.
+
+### Sharing a view
+
+Month and property selections are both encoded in the URL
+(`#g=<properties>&m=<start>-<end>`), so any combination can be shared as a link and
+will open the same way for anyone with the passphrase.
+
+### Exporting
+
+**Download CSV** at the top of the table section exports the current view. Values go
+out as raw numbers rather than the formatted strings on screen, so the file opens in
+a spreadsheet as numbers. Each export leads with a short block recording which
+properties and months it covers and which workbook it came from — a CSV that gets
+forwarded and renamed should still say what it is.
+
 ## Where the data comes from
 
 The portfolio accountant publishes a consolidated profit & loss workbook to a
@@ -73,4 +118,14 @@ index.html          the published, encrypted report
 build/parse.py      workbook  -> normalised JSON
 build/build.py      JSON      -> encrypted, self-contained HTML
 build/template.html the report itself (charts, tables, unlock screen)
+build/bundle.py     regenerates taglyz_builder.py from the three files above
+build/taglyz_builder.py  all of the above in one file, fetched by the refresh job
 ```
+
+## The refresh jobs
+
+Two scheduled tasks rebuild this report and hand over a new `index.html` to upload:
+one on the 8th of each month, one that runs only on demand. Both fetch
+`build/taglyz_builder.py` from this repo's raw URL, so **the repo must stay public
+and that file must stay where it is**. Both always rebuild rather than skipping a
+month that looks unchanged, and both report what moved against the live site.

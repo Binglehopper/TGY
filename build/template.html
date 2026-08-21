@@ -705,7 +705,7 @@ function downloadCSV(btn) {
 /* ============================ views ============================ */
 function kpiTiles(s) {
   const inc = s.ytd("income"), exp = s.ytd("expenses"), noi = s.ytd("noi");
-  const debt = s.ytd("debt"), cash = s.ytd("cashflow"), capex = s.ytd("capex");
+  const debt = s.ytd("debt"), cash = s.ytd("cashflow");
   const dscr = debt ? (noi / debt) : 0;
   const negMonths = s.slice("cashflow").filter(v => v < 0).length;
   const n = s.nMonths();
@@ -713,30 +713,32 @@ function kpiTiles(s) {
     <div class="tile"><div class="l">Total income</div><div class="v">${money(inc)}</div><div class="d">${money(s.ytd("rent"))} of it rent</div></div>
     <div class="tile"><div class="l">Operating expenses</div><div class="v">${money(exp)}</div><div class="d">${inc ? (exp / inc * 100).toFixed(1) : 0}% of income</div></div>
     <div class="tile"><div class="l">Debt service</div><div class="v">${money(debt)}</div><div class="d">${n === 1 ? "mortgage payments" : money(debt / n) + " a month avg"}</div></div>
-    <div class="tile"><div class="l">Cash flow after debt</div><div class="v ${cash >= 0 ? "pos" : "neg"}">${money(cash)}</div><div class="d">${n === 1 ? (cash >= 0 ? "positive this month" : "negative this month") : negMonths + " of " + n + " months negative"}</div></div>
+    <div class="tile"><div class="l">Net operating income</div><div class="v ${noi >= 0 ? "" : "neg"}">${money(noi)}</div><div class="d">${inc ? (noi / inc * 100).toFixed(1) : 0}% margin on income</div></div>
     <div class="tile"><div class="l">Debt service coverage</div><div class="v">${dscr.toFixed(2)}&times;</div><div class="d">NOI &divide; debt service</div></div>
-    <div class="tile"><div class="l">Capital improvements</div><div class="v">${money(capex)}</div><div class="d">${capex ? "outside NOI" : "none booked"}</div></div>
   </section>`;
 }
 
 function heroFor(s, label) {
   const noi = s.ytd("noi"), inc = s.ytd("income");
-  const [a] = s.range(), n = s.nMonths();
-  const selNoi = s.slice("noi"), selM = s.selMonths();
-  const best = selNoi.indexOf(Math.max(...selNoi)), worst = selNoi.indexOf(Math.min(...selNoi));
+  const cash = s.ytd("cashflow"), debt = s.ytd("debt");
+  const n = s.nMonths();
+  // The headline is cash flow after debt; the supporting line carries NOI, so the
+  // two figures each appear exactly once in the top box.
+  const selCash = s.slice("cashflow"), selM = s.selMonths();
+  const best = selCash.indexOf(Math.max(...selCash)), worst = selCash.indexOf(Math.min(...selCash));
   const period = mFiltered() ? mLabel() : "year to date";
   const side = n === 1
     ? `<div><div class="l">Income</div><div class="v">${compact(inc)}</div></div>
        <div><div class="l">Operating expenses</div><div class="v">${compact(s.ytd("expenses"))}</div></div>
-       <div><div class="l">Cash flow after debt</div><div class="v ${s.ytd("cashflow") >= 0 ? "pos" : "neg"}">${compact(s.ytd("cashflow"))}</div></div>`
-    : `<div><div class="l">Best month</div><div class="v">${selM[best]} · ${compact(selNoi[best])}</div></div>
-       <div><div class="l">Weakest month</div><div class="v">${selM[worst]} · ${compact(selNoi[worst])}</div></div>
-       <div><div class="l">Monthly average</div><div class="v">${compact(noi / n)}</div></div>`;
+       <div><div class="l">Net operating income</div><div class="v">${compact(noi)}</div></div>`
+    : `<div><div class="l">Best month</div><div class="v">${selM[best]} · ${compact(selCash[best])}</div></div>
+       <div><div class="l">Weakest month</div><div class="v">${selM[worst]} · ${compact(selCash[worst])}</div></div>
+       <div><div class="l">Monthly average</div><div class="v">${compact(cash / n)}</div></div>`;
   return `<section class="hero">
     <div>
       <div class="label">${label}${mFiltered() ? " · " : ", "}${period}</div>
-      <div class="value">${money(noi)}</div>
-      <div class="heronote">${inc ? (noi / inc * 100).toFixed(1) : 0}% NOI margin on ${money(inc)} of income · ${n} month${n === 1 ? "" : "s"}</div>
+      <div class="value ${cash >= 0 ? "" : "neg"}">${money(cash)}</div>
+      <div class="heronote">${money(noi)} of net operating income${inc ? ` — a ${(noi / inc * 100).toFixed(1)}% margin` : ""} — less ${money(debt)} of debt service · ${n} month${n === 1 ? "" : "s"}</div>
     </div>
     <div class="hero-side">${side}</div>
   </section>`;
@@ -805,7 +807,7 @@ function renderPortfolio() {
     (excluded.length && excluded.length <= 4 ? ` · excluding ${excluded.join(", ")}` : "");
 
   document.getElementById("body").innerHTML =
-    heroFor(s, "Portfolio net operating income") + kpiTiles(s) +
+    heroFor(s, "Portfolio cash flow after debt") + kpiTiles(s) +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
       ${chartCard("NOI and cash flow after debt service", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_NC, "cNC", "0 0 520 300")}
@@ -834,7 +836,7 @@ function renderProperty(name) {
     `${entity ? entity + " · " : ""}${mFiltered() ? mLabel() : P.months[0] + "\u2013" + P.throughMonth + " " + P.year} · accrual basis`;
 
   document.getElementById("body").innerHTML =
-    heroFor(s, "Net operating income") + kpiTiles(s) +
+    heroFor(s, "Cash flow after debt") + kpiTiles(s) +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, in dollars.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
       ${chartCard("NOI and cash flow after debt service", `Monthly. Cash flow is NOI less mortgage payments.${monthNote()}`, LEGEND_NC, "cNC", "0 0 520 300")}
@@ -1160,7 +1162,6 @@ function boot() {
     `Saved groups are stored in this browser; share a view by copying the URL.`;
 
   const btn = $("themeBtn");
-  if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "dark";
   const syncBtn = () => btn.textContent = document.documentElement.dataset.theme === "dark" ? "Light mode" : "Dark mode";
   syncBtn();
   btn.addEventListener("click", () => {
