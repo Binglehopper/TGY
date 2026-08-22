@@ -536,9 +536,7 @@ function chartNoiCash(svg, s) {
     hit.addEventListener("mouseenter", () => { line = el("line", { x1: x(i), x2: x(i), y1: m.t - 6, y2: m.t + ph, stroke: cssv("--axis"), "stroke-width": 1 }, svg); });
     hit.addEventListener("mouseleave", () => { if (line) { line.remove(); line = null; } });
     attachTip(hit, () => `<div class="t">${mo}</div>`
-      + tipRow(cssv("--series-2"), cashLabel(), money2(s.arr("cashflow")[i]))
-      + (ADJ ? tipRow("transparent", RESERVE_LABEL, money2(s.reserve[i])) : "")
-      + tipRow("transparent", "Debt service", money2(s.debt[i])));
+      + tipRow(cssv("--series-2"), cashLabel(), money2(s.arr("cashflow")[i])));
   });
 }
 

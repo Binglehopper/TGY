@@ -37,13 +37,16 @@ month's figure is hard to judge without seeing what the other months looked like
 
 ### Capex reserve
 
+The NOI/cash-flow chart plots a single series — cash flow — and retitles itself
+"Cash flow after debt and reserve" when the reserve is on. End labels are nudged
+apart when they would collide.
+
 A toggle above the report applies a **4% capex reserve on rent**, treated as an
 operating expense so it lands inside net operating income and therefore inside the
-debt-service coverage ratio. It is **on by default**, and every figure it touches
-keeps its as-reported twin visible — the hero carries a "before reserve" stat, each
-tile carries the unadjusted number beneath it, and a standing note states that the
-reserve is an underwriting assumption rather than a figure from the workbook.
-Toggling it off is recorded in the URL (`a=0`), so a shared link keeps the basis it
+debt-service coverage ratio. It is **on by default**. The page states the basis in four places: the toggle and
+its sub-note, the hero line ("after a 4% capex reserve on rent"), the reserve's own
+row in the table, and the CSV's Basis header. The as-reported figures are reached by
+switching the toggle off rather than shown alongside. Toggling it off is recorded in the URL (`a=0`), so a shared link keeps the basis it
 was read on.
 
 **A vacancy allowance is deliberately not modelled.** The workbook reports rent
