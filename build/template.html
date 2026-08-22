@@ -140,8 +140,6 @@
   .tile .l { color:var(--text-secondary); font-size:12.5px; }
   .tile .v { font-size:25px; font-weight:620; letter-spacing:-0.02em; margin-top:3px; }
   .tile .d { font-size:12px; color:var(--text-muted); margin-top:3px; }
-  .tile .was, .hero .was { font-size:11.5px; color:var(--text-muted); margin-top:7px;
-    padding-top:6px; border-top:1px dashed var(--grid); }
   .pos { color:var(--good); } .neg { color:var(--critical); }
 
   .card { background:var(--surface-1); border:1px solid var(--border); border-radius:14px;
@@ -485,7 +483,6 @@ function chartIncomeExpense(svg, s) {
       + tipRow(cssv("--series-1"), "Income", money2(s.arr("income")[i]))
       + tipRow(cssv("--series-2"), "Expenses", money2(s.arr("expenses")[i]))
       + tipRow("transparent", "NOI", money2(s.arr("noi")[i]))
-      + (ADJ ? tipRow("transparent", "Before reserve", money2(s.noi[i])) : "")
       + `<div class="r" style="margin-top:5px"><span class="nm">Click to focus ${mo}</span></div>`);
     hit.addEventListener("click", () => setMonths(ra === i && rb === i ? mAll() : [i, i]));
   });
@@ -495,7 +492,8 @@ function chartNoiCash(svg, s) {
   svg.innerHTML = "";
   const W = 520, H = 300, m = { t: 20, r: 58, b: 34, l: 58 };
   const pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const all = s.arr("noi").concat(s.arr("cashflow"));
+  const arrOf = k => s.arr(k);
+  const all = s.arr("cashflow").slice();
   const lo = Math.min(0, ...all), hi = Math.max(0, ...all);
   const span = hi - lo || 1;
   const step = niceTicks(span, 6)[1] || 1;
@@ -509,8 +507,8 @@ function chartNoiCash(svg, s) {
   });
   s.months.forEach((mo, i) => el("text", { x: x(i), y: H - m.b + 18, class: "xlab", "text-anchor": "middle" }, svg).textContent = mo);
   const [ra, rb] = s.range();
-  const ser = [["noi", "--series-1"], ["cashflow", "--series-2"]];
-  const path = (k, from, to) => s.arr(k).slice(from, to + 1)
+  const ser = [["cashflow", "--series-2"]];
+  const path = (k, from, to) => arrOf(k).slice(from, to + 1)
     .map((v, j) => (j ? "L" : "M") + x(from + j) + " " + y(v)).join(" ");
   ser.forEach(([k, cv]) => {
     if (mFiltered()) {
@@ -521,13 +519,16 @@ function chartNoiCash(svg, s) {
     el("path", { d: path(k, ra, rb), fill: "none", stroke: cssv(cv), "stroke-width": 2,
       "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
   });
-  ser.forEach(([k, cv]) => s.arr(k).forEach((v, i) => {
+  ser.forEach(([k, cv]) => arrOf(k).forEach((v, i) => {
     const on = i >= ra && i <= rb;
     el("circle", { cx: x(i), cy: y(v), r: on ? 4 : 3, fill: cssv(cv),
       stroke: cssv("--surface-1"), "stroke-width": 2, class: on ? "" : "dim" }, svg);
   }));
-  el("text", { x: x(rb) + 10, y: y(s.arr("noi")[rb]) + 4, class: "dlab" }, svg).textContent = compact(s.arr("noi")[rb]);
-  el("text", { x: x(rb) + 10, y: y(s.arr("cashflow")[rb]) + 4, class: "dlab" }, svg).textContent = compact(s.arr("cashflow")[rb]);
+  // Three end labels can collide; walk them apart, keeping the drawing order.
+  const labs = ser.map(([k]) => ({ v: arrOf(k)[rb], yy: y(arrOf(k)[rb]) })).sort((p, q) => p.yy - q.yy);
+  for (let i = 1; i < labs.length; i++)
+    if (labs[i].yy - labs[i - 1].yy < 13) labs[i].yy = labs[i - 1].yy + 13;
+  labs.forEach(L => el("text", { x: x(rb) + 10, y: L.yy + 4, class: "dlab" }, svg).textContent = compact(L.v));
   s.months.forEach((mo, i) => {
     const bw = pw / (s.months.length - 1);
     const hit = el("rect", { x: Math.max(m.l - 4, x(i) - bw / 2), y: m.t - 10, width: bw, height: ph + 20, fill: "transparent", style: "cursor:crosshair" }, svg);
@@ -535,10 +536,9 @@ function chartNoiCash(svg, s) {
     hit.addEventListener("mouseenter", () => { line = el("line", { x1: x(i), x2: x(i), y1: m.t - 6, y2: m.t + ph, stroke: cssv("--axis"), "stroke-width": 1 }, svg); });
     hit.addEventListener("mouseleave", () => { if (line) { line.remove(); line = null; } });
     attachTip(hit, () => `<div class="t">${mo}</div>`
-      + tipRow(cssv("--series-1"), "NOI", money2(s.arr("noi")[i]))
-      + tipRow(cssv("--series-2"), "Cash flow", money2(s.arr("cashflow")[i]))
-      + tipRow("transparent", "Debt service", money2(s.debt[i]))
-      + (ADJ ? tipRow("transparent", "Cash flow before reserve", money2(s.cashflow[i])) : ""));
+      + tipRow(cssv("--series-2"), cashLabel(), money2(s.arr("cashflow")[i]))
+      + (ADJ ? tipRow("transparent", RESERVE_LABEL, money2(s.reserve[i])) : "")
+      + tipRow("transparent", "Debt service", money2(s.debt[i])));
   });
 }
 
@@ -778,7 +778,6 @@ function buildCSV(s, title) {
   L.push(["Basis", ADJ
     ? `Accrual, with ${pctLabel()} applied as an operating expense. That reserve is an underwriting overlay, NOT a figure from the source workbook.`
     : "Accrual. Figures as reported in the source workbook."]);
-  if (ADJ) L.push(["Before reserve", `NOI ${money2(s.raw("noi"))}, cash flow after debt ${money2(s.raw("cashflow"))}`]);
   const variance = s.ytd("variance");
   if (Math.abs(variance) >= 1) {
     L.push(["Note", `The source workbook's expense subtotals omit an insurance amount recorded in the same column; ` +
@@ -827,14 +826,12 @@ function kpiTiles(s) {
   const dscr = debt ? (noi / debt) : 0;
   const negMonths = s.slice("cashflow").filter(v => v < 0).length;
   const n = s.nMonths();
-  const was = k => ADJ ? `<div class="was">${money(s.raw(k))} before reserve</div>` : "";
-  const dscrRaw = debt ? s.raw("noi") / debt : 0;
   return `<section class="tiles">
-    <div class="tile"><div class="l">Total income</div><div class="v">${money(inc)}</div><div class="d">${money(s.ytd("rent"))} of it rent</div>${was("income")}</div>
-    <div class="tile"><div class="l">Operating expenses</div><div class="v">${money(exp)}</div><div class="d">${inc ? (exp / inc * 100).toFixed(1) : 0}% of income</div>${was("expenses")}</div>
+    <div class="tile"><div class="l">Total income</div><div class="v">${money(inc)}</div><div class="d">${money(s.ytd("rent"))} of it rent</div></div>
+    <div class="tile"><div class="l">Operating expenses</div><div class="v">${money(exp)}</div><div class="d">${inc ? (exp / inc * 100).toFixed(1) : 0}% of income</div></div>
     <div class="tile"><div class="l">Debt service</div><div class="v">${money(debt)}</div><div class="d">${n === 1 ? "mortgage payments" : money(debt / n) + " a month avg"}</div></div>
-    <div class="tile"><div class="l">Net operating income</div><div class="v ${noi >= 0 ? "" : "neg"}">${money(noi)}</div><div class="d">${inc ? (noi / inc * 100).toFixed(1) : 0}% margin on income</div>${was("noi")}</div>
-    <div class="tile"><div class="l">Debt service coverage</div><div class="v">${dscr.toFixed(2)}&times;</div><div class="d">NOI &divide; debt service</div>${ADJ ? `<div class="was">${dscrRaw.toFixed(2)}&times; before reserve</div>` : ""}</div>
+    <div class="tile"><div class="l">Net operating income</div><div class="v ${noi >= 0 ? "" : "neg"}">${money(noi)}</div><div class="d">${inc ? (noi / inc * 100).toFixed(1) : 0}% margin on income</div></div>
+    <div class="tile"><div class="l">Debt service coverage</div><div class="v">${dscr.toFixed(2)}&times;</div><div class="d">NOI &divide; debt service</div></div>
   </section>`;
 }
 
@@ -847,10 +844,7 @@ function heroFor(s, label) {
   const selCash = s.slice("cashflow"), selM = s.selMonths();
   const best = selCash.indexOf(Math.max(...selCash)), worst = selCash.indexOf(Math.min(...selCash));
   const period = mFiltered() ? mLabel() : "year to date";
-  const asRep = ADJ
-    ? `<div><div class="l">Before reserve</div><div class="v ${s.raw("cashflow") >= 0 ? "" : "neg"}">${compact(s.raw("cashflow"))}</div></div>`
-    : "";
-  const side = asRep + (n === 1
+  const side = (n === 1
     ? `<div><div class="l">Income</div><div class="v">${compact(inc)}</div></div>
        <div><div class="l">Operating expenses</div><div class="v">${compact(s.ytd("expenses"))}</div></div>
        <div><div class="l">Net operating income</div><div class="v">${compact(noi)}</div></div>`
@@ -875,9 +869,9 @@ const chartCard = (title, cap, legend, id, vb) => `<section class="card">
 const LEGEND_IE = `<div class="legend">
   <span><i class="key" style="background:var(--series-1)"></i>Income</span>
   <span><i class="key" style="background:var(--series-2)"></i>Operating expenses</span></div>`;
-const LEGEND_NC = `<div class="legend">
-  <span><i class="key line" style="background:var(--series-1)"></i>Net operating income</span>
-  <span><i class="key line" style="background:var(--series-2)"></i>Cash flow after debt</span></div>`;
+const cashLabel = () => `Cash flow after debt${ADJ ? " and reserve" : ""}`;
+const legendNC = () => `<div class="legend">
+  <span><i class="key line" style="background:var(--series-2)"></i>${cashLabel()}</span></div>`;
 const legendMix = () => `<div class="legend">` + activeGroups().map((g, i) =>
   `<span><i class="key" style="background:var(--${GROUP_VAR[i].slice(2)})"></i>${g}</span>`).join("") + `</div>`;
 
@@ -931,11 +925,11 @@ function renderPortfolio() {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Portfolio cash flow after debt") + kpiTiles(s) +
-    adjBanner(s) + varianceNote(s) +
+    varianceNote(s) +
     `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
-      ${chartCard("NOI and cash flow after debt service", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_NC, "cNC", "0 0 520 300")}
+      ${chartCard(cashLabel(), `Monthly, ${scopeLabel()}.${monthNote()}`, legendNC(), "cNC", "0 0 520 300")}
     </div>` +
     chartCard("Cash flow after debt service, by property",
       `${mFiltered() ? mLabel() : "Year to date"}. ${winners} of ${props.length} ${isFiltered() ? "selected " : ""}properties are cash-flow positive after debt. Click any row to open it.`,
@@ -963,11 +957,11 @@ function renderProperty(name) {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Cash flow after debt") + kpiTiles(s) +
-    adjBanner(s) + varianceNote(s) +
+    varianceNote(s) +
     `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, in dollars.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
-      ${chartCard("NOI and cash flow after debt service", `Monthly. Cash flow is NOI less mortgage payments.${monthNote()}`, LEGEND_NC, "cNC", "0 0 520 300")}
+      ${chartCard(cashLabel(), `Monthly. Net operating income less mortgage payments${ADJ ? " and the capex reserve" : ""}.${monthNote()}`, legendNC(), "cNC", "0 0 520 300")}
     </div>` +
     chartCard("From rent to cash flow", `${mFiltered() ? mLabel() : "Year to date"}. Each step is a deduction against the running balance.`, "", "cFall", "0 0 1040 340") +
     chartCard("Where the operating spend went", `${mFiltered() ? mLabel() : "Year-to-date"} total by category, as recorded on each line.`, "", "cBars", "0 0 1040 400") +
@@ -998,21 +992,6 @@ $("adjRow").addEventListener("click", e => {
   writeHash(); renderAdj(); draw();
 });
 
-/* A standing, unmissable statement of what basis the figures are on. Default-on
-   means the adjusted view is what a reader meets first, so it has to say so. */
-function adjBanner(s) {
-  if (!ADJ) return "";
-  return `<div class="note" style="border-left-color:var(--series-5)">
-    <b>A ${(RES_RATE * 100).toFixed(0)}% capex reserve is applied.</b> ${money2(s.ytd("reserve"))} is set aside over this
-    period and treated as an operating expense, so it lands inside both net operating income and the
-    coverage ratio. It is an underwriting assumption, <b>not</b> a figure from the accountant's workbook —
-    as reported, NOI is <b>${money2(s.raw("noi"))}</b> and cash flow after debt is
-    <b>${money2(s.raw("cashflow"))}</b>.
-    ${Math.abs(s.raw("capex")) > 1 ? `<br><br>Worth noting: <b>${money2(s.raw("capex"))}</b> of capital improvements were
-    actually booked over this period, against a ${money2(s.ytd("reserve"))} reserve. The reserve is an
-    alternative to that figure, never an addition to it — and actual spend running
-    ${(s.raw("capex") / s.ytd("rent") * 100).toFixed(1)}% of rent against a ${(RES_RATE * 100).toFixed(0)}% assumption is worth a look on its own.` : ""}</div>`;
-}
 
 /* ---- month chips ---- */
 function setMonths(range) {
