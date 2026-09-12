@@ -27,8 +27,15 @@ rebuilding (below) whenever the audience changes.
 
 A chip row sits above everything: **Year to date** plus one chip per month. Click a
 month to focus it, shift-click a second for a range, click the active month again to
-return to the full year. Clicking a column in the income-vs-expenses chart does the
+return to the default. Clicking a column in the income-vs-expenses chart does the
 same thing.
+
+**The report opens on February onward, not the full year.** January's source data is
+still being corrected, so it is excluded from the view a reader lands on — the chip
+row says so ("Jan excluded"), and January remains one click away via its own chip or
+**Year to date**, which labels itself "includes Jan". The default is the clean URL;
+any other selection is encoded in the hash. When January is fixed, change
+`mDefault()` in `template.html` to return `mAll()`.
 
 Selecting a month **focuses** rather than filters. Every number — headline, tiles,
 property ranking, table, CSV — covers only the months you picked. The trend charts
@@ -37,17 +44,16 @@ month's figure is hard to judge without seeing what the other months looked like
 
 ### Capex reserve
 
-The NOI/cash-flow chart plots a single series — cash flow — and retitles itself
-"Cash flow after debt and reserve" when the reserve is on. End labels are nudged
-apart when they would collide.
-
 A toggle above the report applies a **4% capex reserve on rent**, treated as an
 operating expense so it lands inside net operating income and therefore inside the
 debt-service coverage ratio. It is **on by default**. The page states the basis in four places: the toggle and
 its sub-note, the hero line ("after a 4% capex reserve on rent"), the reserve's own
 row in the table, and the CSV's Basis header. The as-reported figures are reached by
-switching the toggle off rather than shown alongside. Toggling it off is recorded in the URL (`a=0`), so a shared link keeps the basis it
-was read on.
+switching the toggle off rather than being shown alongside — toggling it off is
+recorded in the URL (`a=0`), so a shared link keeps the basis it was read on.
+
+The cash-flow chart plots a single series and retitles itself "Cash flow after debt
+and reserve" when the toggle is on.
 
 **A vacancy allowance is deliberately not modelled.** The workbook reports rent
 *collected*, so real vacancy is already deducted from it; applying a further
@@ -55,7 +61,8 @@ percentage would be a stress case on an already-net figure rather than a pro for
 restatement, which needs gross potential rent the workbook does not carry.
 
 Note that actual capital improvements are booked separately and have been running
-well above the 4% assumption — $151,843 against a $42,882 reserve for Jan–Jul 2026.
+well above the 4% assumption — $151,843 actual against a $42,882 reserve for
+Jan–Jul 2026, about 14% of rent against a 4% allowance.
 The reserve is an alternative to that figure, never an addition to it.
 
 ### Properties
@@ -104,9 +111,12 @@ shared Google Drive folder each month, named on a fixed pattern:
 ...
 ```
 
-The refresh job picks the **highest-numbered** file in that folder, parses it, and
-rebuilds this page. Source of record is always that workbook — this report never
-adjusts, restates, or second-guesses it.
+The refresh job picks the file with the **newest creation date**, cross-checked
+against the highest month number. The two agree every normal month; they disagree
+once a year, in January, when the new `01.` file is newest but December's `12.` still
+holds the higher number — the newly created file wins and the job says so in its
+report. Unnumbered files are ignored. Source of record is always that workbook — this
+report never adjusts, restates, or second-guesses it.
 
 ## Rebuilding by hand
 
@@ -133,10 +143,16 @@ everything **by label rather than by position**:
   entry appended at the end (which would silently shift the whole series)
 
 It also reads each section's subtotal **and** recomputes it from the line items,
-and reports the difference as `variance`. Where those disagree the report shows
-the workbook's own figure and states the discrepancy rather than quietly picking
-one. As of the July 2026 file this is not hypothetical: the per-property expense
-subtotals omit the insurance line in January, February and June.
+and reports the difference as `variance`. Where those disagree the report shows the
+workbook's own figure and states the discrepancy rather than quietly picking one.
+
+This is not hypothetical. Through mid-2026 the per-property expense subtotals omitted
+the insurance line in January, February and June — $12,224 portfolio-wide. That was
+fixed in August 2026 and variance has read 0.00 since. A later attempt at the same fix
+zeroed June's insurance across 15 of 17 properties *and* adjusted the subtotals to
+match, so the variance check read clean on data that was wrong. **Internal consistency
+is not correctness** — the refresh job now also checks that insurance holds its flat
+monthly pattern per property.
 
 ## Layout
 
@@ -149,10 +165,20 @@ build/bundle.py     regenerates taglyz_builder.py from the three files above
 build/taglyz_builder.py  all of the above in one file, fetched by the refresh job
 ```
 
-## The refresh jobs
+## The refresh job
 
-Two scheduled tasks rebuild this report and hand over a new `index.html` to upload:
-one on the 8th of each month, one that runs only on demand. Both fetch
-`build/taglyz_builder.py` from this repo's raw URL, so **the repo must stay public
-and that file must stay where it is**. Both always rebuild rather than skipping a
-month that looks unchanged, and both report what moved against the live site.
+One scheduled task, **"TAGLYZ dashboard — refresh now"**, run manually whenever the
+accountant publishes. Nothing runs on a schedule. It fetches
+`build/taglyz_builder.py` from this repo's raw URL with a cache-buster, so **the repo
+must stay public and that file must stay where it is** — `raw.githubusercontent.com`
+caches for five minutes, and a stale copy silently rebuilds an older version of the
+dashboard with no error.
+
+Before sending a file it verifies the build is *complete*, not just correct: the
+reserve toggle, the waterfall, the month chips and the CSV button must all be present,
+or it reports a stale generator and sends nothing. It always rebuilds rather than
+skipping a month that looks unchanged, and reports what moved against the live site.
+
+**A change to the report itself means uploading `build/` as well as `index.html`.**
+Upload only the page and the next refresh reverts your change; upload only the
+generator and the live page stays on the old build until the next refresh.

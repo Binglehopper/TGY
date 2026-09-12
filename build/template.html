@@ -375,6 +375,15 @@ const isFiltered = () => !!VIEW.include && VIEW.include.size < allProps().length
    headline, tiles, rankings, table, CSV - covers only the selection. */
 let MSEL = null;                       // set once P is known
 const mAll = () => [0, P.months.length - 1];
+/* The report OPENS on the second month onward. January's source data is still
+   being corrected, so including it by default would put a figure nobody trusts
+   at the top of the page. January stays reachable - its own chip, and the
+   "Year to date" chip - it just is not the view a reader lands on. */
+const mDefault = () => P.months.length > 1 ? [1, P.months.length - 1] : mAll();
+const isDefaultRange = () => MSEL && MSEL[0] === mDefault()[0] && MSEL[1] === mDefault()[1];
+/* mFiltered stays "narrower than the whole workbook", so opening on Feb-Jul
+   labels itself as a range and dims January in the trend charts rather than
+   hiding the exclusion. */
 const mFiltered = () => MSEL && (MSEL[0] !== 0 || MSEL[1] !== P.months.length - 1);
 const mLabel = () => MSEL[0] === MSEL[1]
   ? `${P.months[MSEL[0]]} ${P.year}`
@@ -484,7 +493,7 @@ function chartIncomeExpense(svg, s) {
       + tipRow(cssv("--series-2"), "Expenses", money2(s.arr("expenses")[i]))
       + tipRow("transparent", "NOI", money2(s.arr("noi")[i]))
       + `<div class="r" style="margin-top:5px"><span class="nm">Click to focus ${mo}</span></div>`);
-    hit.addEventListener("click", () => setMonths(ra === i && rb === i ? mAll() : [i, i]));
+    hit.addEventListener("click", () => setMonths(ra === i && rb === i ? mDefault() : [i, i]));
   });
 }
 
@@ -1001,6 +1010,7 @@ function setMonths(range) {
 function renderMonths() {
   const [a, b] = MSEL, last = P.months.length - 1;
   const all = !mFiltered();
+  const excluded = P.months.slice(0, mDefault()[0]).join(", ");
   $("monthRow").innerHTML =
     `<button type="button" class="mchip" data-all="1" aria-pressed="${all}">Year to date</button>
      <span class="sep"></span>` +
@@ -1010,7 +1020,9 @@ function renderMonths() {
       return `<button type="button" class="mchip${inRange ? " inrange" : ""}" data-i="${i}"
         aria-pressed="${single}">${mo}</button>`;
     }).join("") +
-    (all ? `<span class="hint">shift-click for a range</span>` : "");
+    (all ? `<span class="hint">includes ${excluded} &mdash; shift-click for a range</span>`
+     : isDefaultRange() ? `<span class="hint">${excluded} excluded &mdash; shift-click for a range</span>`
+     : "");
 }
 $("monthRow").addEventListener("click", e => {
   const btn = e.target.closest("button");
@@ -1021,7 +1033,7 @@ $("monthRow").addEventListener("click", e => {
     const anchor = MSEL[0];
     setMonths([Math.min(anchor, i), Math.max(anchor, i)]);
   } else {
-    setMonths(MSEL[0] === i && MSEL[1] === i ? mAll() : [i, i]);
+    setMonths(MSEL[0] === i && MSEL[1] === i ? mDefault() : [i, i]);
   }
 });
 
@@ -1191,7 +1203,7 @@ function writeHash() {
   const parts = [];
   if (VIEW.type === "property") parts.push(encodeURIComponent(VIEW.label));
   else if (isFiltered()) parts.push("g=" + includedProps().map(encodeURIComponent).join(","));
-  if (mFiltered()) parts.push("m=" + MSEL[0] + "-" + MSEL[1]);
+  if (!isDefaultRange()) parts.push("m=" + MSEL[0] + "-" + MSEL[1]);
   if (!ADJ) parts.push("a=0");
   const h = parts.join("&");
   history.replaceState(null, "", h ? "#" + h : location.pathname + location.search);
@@ -1199,7 +1211,7 @@ function writeHash() {
 function readHash() {
   const all = location.hash.slice(1).split("&");
   const last = P.months.length - 1;
-  MSEL = mAll();
+  MSEL = mDefault();
   ADJ = !all.includes("a=0");
   const mPart = all.find(p => p.startsWith("m="));
   if (mPart) {
@@ -1286,7 +1298,7 @@ function draw() {
 /* ============================ app ============================ */
 function boot() {
   initGroups();
-  MSEL = mAll();
+  MSEL = mDefault();
   GROUPS = loadGroups();
   readHash();
   renderMonths();
