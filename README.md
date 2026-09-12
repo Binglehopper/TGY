@@ -100,6 +100,23 @@ A filtered view always announces itself — the title changes, the subtitle read
 captions name the scope. A view showing a subset should never be mistakable for the
 whole portfolio.
 
+### Feedback
+
+A **Feedback** tab is fixed to the right edge of the window, vertically centred. It
+links to the shared Google Doc *TGY Finance Dashboard - Bugs/Feature Requests* and
+opens in a **new tab** (`target="_blank" rel="noopener"`) — same-tab navigation would
+cost the reader their passphrase and their month and property selections.
+
+It appears only after the report is unlocked, sits below the tooltip and filter-panel
+layers so it never covers either, and is hidden when printing. Below 700px it is
+hidden entirely (the content runs full width there and the tab would sit over a
+chart); the footer carries a plain text link at that size instead.
+
+Note the doc's sharing: **anyone with the link can edit**. That means any dashboard
+viewer can read and alter everyone else's feedback. Switching the doc to *commenter*,
+or pointing the link at a Google Form, is worth doing before the dashboard link goes
+to a wider audience.
+
 ### Sharing a view
 
 Month and property selections are both encoded in the URL

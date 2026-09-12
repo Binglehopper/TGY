@@ -167,6 +167,25 @@
   .rowhit { fill:transparent; cursor:pointer; }
   .rowhit:hover { fill:var(--hover); }
 
+  /* ---------- feedback tab, fixed to the right edge ----------
+     z-index sits below .tip (40) and .filterpanel (30) so neither ends up behind it.
+     Hidden below 700px, where the content runs full width and the tab would cover
+     a chart; the footer carries a plain link at that size instead. Hidden in print. */
+  .fbtab { position:fixed; right:0; top:50%; transform:translateY(-50%); z-index:28;
+    background:var(--series-1); color:#fff; text-decoration:none;
+    font-size:11.5px; font-weight:600; letter-spacing:.03em;
+    writing-mode:vertical-rl; text-orientation:mixed;
+    padding:12px 7px; border-radius:8px 0 0 8px;
+    box-shadow:0 3px 14px rgba(0,0,0,.16); }
+  .fbtab:hover { filter:brightness(1.08); }
+  .fbtab:focus-visible { outline:2px solid var(--text-primary); outline-offset:3px; }
+  .fbfoot { display:none; }
+  @media (max-width:700px) {
+    .fbtab { display:none; }
+    .fbfoot { display:inline; }
+  }
+  @media print { .fbtab { display:none; } }
+
   .tip { position:fixed; pointer-events:none; z-index:40; opacity:0; transition:opacity .1s;
     background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:9px 11px;
     font-size:12.5px; box-shadow:0 6px 20px rgba(0,0,0,.14); min-width:158px; }
@@ -218,6 +237,8 @@
 </div>
 
 <div class="wrap" id="app" hidden>
+  <a class="fbtab" id="fbTab" href="https://docs.google.com/document/d/1JwXX6ZekA4pfSJ6DEDtQKM4_msqRGNHuZdKW9dJjR10/edit" target="_blank" rel="noopener"
+     title="Report a bug or request a feature">Feedback</a>
   <header class="top">
     <div>
       <h1 class="title" id="viewTitle">Portfolio</h1>
@@ -1343,6 +1364,7 @@ function boot() {
   $("foot").innerHTML =
     `Generated ${esc(META.generated)} from <b>${esc(META.source)}</b>, the consolidated profit &amp; loss prepared by the portfolio accountant. ` +
     `Figures follow that workbook as reported. Refreshed monthly. ` +
+    `<span class="fbfoot"><a href="https://docs.google.com/document/d/1JwXX6ZekA4pfSJ6DEDtQKM4_msqRGNHuZdKW9dJjR10/edit" target="_blank" rel="noopener" style="color:var(--series-1)">Report a bug or request a feature</a>. </span>` +
     `Saved groups are stored in this browser; share a view by copying the URL.`;
 
   const btn = $("themeBtn");
