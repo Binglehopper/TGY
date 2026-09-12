@@ -361,6 +361,27 @@ const activeGroups = () => ADJ ? GROUP_NAMES : GROUP_NAMES.slice(0, 4);
    property from the roll-up does not hide its own page. */
 const VIEW = { type: "portfolio", label: "Portfolio", include: null };  // include:null = all
 const allProps = () => Object.keys(P.properties);
+
+/* ---- the stabilized group, and the view the report opens on ----
+   Defined by EXCLUSION rather than by listing its members: a property added to
+   the workbook later is then treated as stabilized and shows up in the default
+   view, instead of silently vanishing from it until someone remembers to edit
+   this list. To change what counts as stabilized, edit STAB_EXCLUDE. */
+const STAB_EXCLUDE = ["308 7th Ave", "Potomac"];
+const STAB_NAME = "Stabilized portfolio";
+const stabProps = () => allProps().filter(p => !STAB_EXCLUDE.includes(p));
+/* Is the stabilized group even meaningful for this workbook? If none of the
+   excluded names are present, fall back to the whole portfolio rather than
+   opening on a view identical to it but labelled as a subset. */
+const stabApplies = () => STAB_EXCLUDE.some(p => allProps().includes(p));
+const defaultInclude = () => stabApplies() ? stabProps() : null;
+const isDefaultSelection = () => {
+  if (VIEW.type !== "portfolio") return false;
+  const d = defaultInclude();
+  if (!d) return !VIEW.include;
+  if (!VIEW.include || VIEW.include.size !== d.length) return false;
+  return d.every(p => VIEW.include.has(p));
+};
 const includedProps = () =>
   VIEW.include ? allProps().filter(p => VIEW.include.has(p)) : allProps();
 const isFiltered = () => !!VIEW.include && VIEW.include.size < allProps().length;
@@ -1056,8 +1077,9 @@ function buildFilterPanel() {
   const inc = new Set(includedProps());
   const byEnt = propsByEntity();
   let h = `<div class="fhead">
-      <button type="button" data-all="1">Select all</button>
-      <button type="button" data-none="1">Clear all</button>
+      <button type="button" data-all="1">All ${allProps().length}</button>
+      ${stabApplies() ? `<button type="button" data-reset="1">Stabilized</button>` : ""}
+      <button type="button" data-none="1">Clear</button>
     </div>`;
   for (const ent in byEnt) {
     h += `<div class="fgroup"><span>${esc(ent)}</span><button type="button" data-ent="${esc(ent)}">only</button></div>`;
@@ -1164,6 +1186,7 @@ $("filterPanel").addEventListener("change", e => {
 $("filterPanel").addEventListener("click", e => {
   const d = e.target.dataset;
   if (d.all) { applySelection(new Set(allProps()), "Portfolio"); buildFilterPanel(); }
+  else if (d.reset) { applySelection(new Set(defaultInclude() || allProps()), STAB_NAME); buildFilterPanel(); }
   else if (d.none) { /* clearing everything would leave nothing to show */
     const first = allProps()[0];
     applySelection(new Set([first])); buildFilterPanel();
@@ -1202,7 +1225,9 @@ function openGroup(g) {
 function writeHash() {
   const parts = [];
   if (VIEW.type === "property") parts.push(encodeURIComponent(VIEW.label));
-  else if (isFiltered()) parts.push("g=" + includedProps().map(encodeURIComponent).join(","));
+  else if (isFiltered() && !isDefaultSelection())
+    parts.push("g=" + includedProps().map(encodeURIComponent).join(","));
+  else if (!isFiltered() && defaultInclude()) parts.push("g=all");
   if (!isDefaultRange()) parts.push("m=" + MSEL[0] + "-" + MSEL[1]);
   if (!ADJ) parts.push("a=0");
   const h = parts.join("&");
@@ -1219,14 +1244,17 @@ function readHash() {
     if (Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b <= last && a <= b) MSEL = [a, b];
   }
   const raw = all.find(p => !p.startsWith("m=") && !p.startsWith("a=")) || "";
-  if (!raw) { setInclude(null, "Portfolio"); return; }
+  if (!raw) { setInclude(defaultInclude(), defaultInclude() ? STAB_NAME : "Portfolio"); return; }
+  if (raw === "g=all") { setInclude(null, "Portfolio"); return; }
   if (raw.startsWith("g=")) {
     const props = raw.slice(2).split(",").map(decodeURIComponent).filter(p => P.properties[p]);
     if (props.length) {
       const named = GROUPS.find(g => g.props.length === props.length && g.props.every(p => props.includes(p)));
       const ent = Object.keys(P.entities).find(e =>
         P.entities[e].length === props.length && P.entities[e].every(p => props.includes(p)));
-      setInclude(props, named ? named.name : ent || "Custom selection");
+      setInclude(props, named ? named.name
+        : ent || (defaultInclude() && props.length === defaultInclude().length
+            && defaultInclude().every(p => props.includes(p)) ? STAB_NAME : "Custom selection"));
       return;
     }
   }
@@ -1238,6 +1266,9 @@ function readHash() {
 function syncSelector() {
   const sel = $("propSel");
   let html = `<option value="__ALL__">Portfolio — all properties</option>`;
+  if (stabApplies()) {
+    html += `<optgroup label="Default"><option value="__STAB__">${esc(STAB_NAME)} (${stabProps().length})</option></optgroup>`;
+  }
   if (GROUPS.length) {
     html += `<optgroup label="Saved groups">` + GROUPS.map(g =>
       `<option value="__g:${esc(g.id)}">${esc(g.name)} (${g.props.length})</option>`).join("") + `</optgroup>`;
@@ -1263,7 +1294,8 @@ function syncSelector() {
     const g = GROUPS.find(x => x.props.length === inc.length && x.props.every(p => inc.includes(p)));
     const e = Object.keys(P.entities).find(x =>
       P.entities[x].length === inc.length && P.entities[x].every(p => inc.includes(p)));
-    val = g ? "__g:" + g.id : e ? "__e:" + e : "__CUSTOM__";
+    val = isDefaultSelection() ? "__STAB__"
+        : g ? "__g:" + g.id : e ? "__e:" + e : "__CUSTOM__";
     if (val === "__CUSTOM__") {
       html = `<option value="__CUSTOM__">Custom selection (${inc.length})</option>` + html;
     }
@@ -1275,6 +1307,7 @@ function syncSelector() {
 function pick(v) {
   if (v === "__CUSTOM__") return;
   if (v === "__ALL__") setInclude(null, "Portfolio");
+  else if (v === "__STAB__") setInclude(defaultInclude(), STAB_NAME);
   else if (v.startsWith("__g:")) {
     const g = GROUPS.find(x => x.id === v.slice(4));
     if (g) return openGroup(g);

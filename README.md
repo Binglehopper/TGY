@@ -67,6 +67,24 @@ The reserve is an alternative to that figure, never an addition to it.
 
 ### Properties
 
+**The report opens on the "Stabilized portfolio" — all properties except 308 7th Ave
+and Potomac.** It is a built-in, not a saved group, so it is the default for every
+viewer rather than only in the browser that created it. It appears in the view
+dropdown under "Default", and as a **Stabilized** button in the filter panel beside
+**All 17** and **Clear**.
+
+It is defined by *exclusion* in `template.html` (`STAB_EXCLUDE`), so a property added
+to the workbook later is treated as stabilized and appears in the default view,
+rather than silently vanishing from it until someone edits a list of members. To
+change what counts as stabilized, edit that one array. Selecting all 17 is recorded
+in the URL as `#g=all`; the default is the clean URL.
+
+Note what the default does to the headline: excluding those two properties takes
+Feb–Jul cash flow after debt from **-$58,817 to +$53,871** and coverage from 0.86x to
+1.19x. Both excluded names are printed in the subtitle and reachable from the
+"2 excluded" link, because a view that turns a portfolio-wide deficit into a surplus
+has to say what it left out.
+
 The filter button opens a checkbox list of every property, grouped by entity, with
 `only` links to isolate one entity and one-click **Select all / Clear all**. The
 entities also appear directly in the view dropdown as one-click roll-ups.
