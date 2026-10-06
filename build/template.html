@@ -222,6 +222,9 @@
   .note b { color:var(--text-primary); }
   /* A declared reclassification is not a defect - it reads as information, not warning. */
   .note.info { border-left-color:var(--series-1); }
+  .note ul { margin:7px 0 9px; padding-left:18px; }
+  .note li { margin:2px 0; }
+  .note .corrprop { margin-top:10px; }
   footer { color:var(--text-muted); font-size:12px; margin-top:22px; }
 </style>
 </head>
@@ -843,6 +846,8 @@ function buildCSV(s, title) {
         `${money2(a.monthly * hit.length)} in total. Cash flow after debt is unchanged; NOI and DSCR are not.`]);
     });
   }
+  (P.corrections || []).filter(c => includedProps().includes(c.property)).forEach(c =>
+    L.push(["Corrected", `${c.property}: ${c.what}. ${c.why} Applied here, not in the source workbook.`]));
   const variance = s.ytd("variance");
   if (Math.abs(variance) >= 1) {
     L.push(["Note", `The source workbook's expense subtotals omit an insurance amount recorded in the same column; ` +
@@ -940,6 +945,25 @@ const legendNC = () => `<div class="legend">
 const legendMix = () => `<div class="legend">` + activeGroups().map((g, i) =>
   `<span><i class="key" style="background:var(--${GROUP_VAR[i].slice(2)})"></i>${g}</span>`).join("") + `</div>`;
 
+function correctionNote(scope) {
+  const cs = (P.corrections || []).filter(c => scope.includes(c.property));
+  if (!cs.length) return "";
+  const byProp = {};
+  cs.forEach(c => (byProp[c.property] = byProp[c.property] || []).push(c));
+  const blocks = Object.keys(byProp).map(prop =>
+    `<div class="corrprop"><b>${esc(prop)}</b></div><ul>` + byProp[prop].map(c =>
+      `<li>${esc(c.what)} — ${esc(c.why)}</li>`).join("") + `</ul>`).join("");
+  const moves = cs.filter(c => c.kind === "month").length;
+  return `<div class="note info"><b>Owner-directed corrections to the source workbook.</b>
+    Individual charges the owner has identified as booked to the wrong month or the wrong
+    line. They are applied here but not in the workbook, so figures on this page differ
+    from it in these cells.${blocks}
+    ${moves ? "A charge moved between months changes both months' expense totals, NOI and cash flow, and the pair nets to zero across them. " : ""}A
+    charge moved between lines changes the line detail and the expense mix only; no total
+    moves. Each correction is tied to the value the cell currently holds and stops applying
+    once the workbook is corrected at source, so nothing is corrected twice.</div>`;
+}
+
 function escrowNote(scope) {
   const adj = (P.adjustments || []).filter(a => scope.includes(a.property));
   if (!adj.length) return "";
@@ -1012,7 +1036,7 @@ function renderPortfolio() {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Portfolio cash flow after debt") + kpiTiles(s) +
-    varianceNote(s) + escrowNote(props) +
+    varianceNote(s) + escrowNote(props) + correctionNote(props) +
     `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
@@ -1044,7 +1068,7 @@ function renderProperty(name) {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Cash flow after debt") + kpiTiles(s) +
-    varianceNote(s) + escrowNote([name]) +
+    varianceNote(s) + escrowNote([name]) + correctionNote([name]) +
     `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, in dollars.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}

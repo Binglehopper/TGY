@@ -53,6 +53,39 @@ ESCROWED_INSURANCE = {
     "Potomac": 1152.17,
 }
 
+# ---------------------------------------------------------------------------
+# Owner-directed corrections.
+#
+# Individual cells the owner has told us are miscoded in the source workbook -
+# an expense booked to the wrong month, or to the wrong line within a month.
+# Each one is guarded on `expect`: the value the source cell must currently hold
+# for the correction to apply. If the accountant fixes it at source, the cell no
+# longer matches, the correction quietly stops firing, and the figure is not
+# corrected twice. Corrections that stop matching are reported in the payload
+# under `correctionsSkipped` so they can be retired rather than silently rotting.
+#
+# Two shapes:
+#   from_month / to_month - the same line, moved between months. Changes both
+#       months' expense totals, NOI and cash flow; the pair nets to zero.
+#   from_line / to_line   - the same month, moved between lines. Changes the line
+#       detail and the expense-mix grouping only; no total moves.
+# ---------------------------------------------------------------------------
+CORRECTIONS = [
+    {"property": "2727 Broadway", "line": "Trash", "amount": 327.54,
+     "from_month": "Jun", "to_month": "Jul", "expect": 655.08,
+     "why": "The June trash charge is double the run rate and July is booked at zero; "
+            "the bill covers both months."},
+    {"property": "2727 Broadway", "month": "Jun", "amount": 215.00,
+     "from_line": "Property Manager", "to_line": "Repairs & Maintenance", "expect": 386.53,
+     "why": "Repair work booked to property management. The residual is the "
+            "property's $171.53 monthly run rate."},
+    {"property": "2727 Broadway", "month": "Apr", "amount": 499.00,
+     "from_line": "Accounting", "to_line": "Repairs & Maintenance", "expect": 520.38,
+     "why": "Repair work booked to accounting. The residual is the property's "
+            "$21.38 monthly run rate."},
+]
+
+
 
 # Canonical grouping for the expense-mix view.
 GROUPS = {
@@ -68,6 +101,10 @@ GROUPS = {
 
 def norm(v):
     return str(v).strip().lower() if v is not None else ""
+
+
+def money(v):
+    return f"${v:,.2f}"
 
 
 def num(v):
@@ -259,6 +296,54 @@ def parse(path):
                 all_props.append(p)
     data = {p: [per_month[i].get(p) or blank() for i in range(n)] for p in all_props}
 
+    # Owner-directed corrections (see CORRECTIONS). Applied before the escrow
+    # reclassification so a correction can never fight with it.
+    corrections, corrections_skipped = [], []
+
+    def shift_totals(rec, delta):
+        """Move `delta` of expense into a month, keeping every total consistent.
+        Both the workbook's own subtotal and the recomputed figure move together,
+        so `variance` - the gap between them - is left exactly as the workbook
+        reported it."""
+        rec["totalExpenses"] = round(rec["totalExpenses"] + delta, 2)
+        rec["totalExpensesRecorded"] = round(rec["totalExpensesRecorded"] + delta, 2)
+        rec["noi"] = round(rec["noi"] - delta, 2)
+        rec["cashflow"] = round(rec["noi"] - rec["debt"], 2)
+
+    for c in CORRECTIONS:
+        prop = c["property"]
+        rec_of = lambda mo: data[prop][months.index(mo)] if prop in data and mo in months else None
+        amt = round(c["amount"], 2)
+        if "from_month" in c:
+            src, dst = rec_of(c["from_month"]), rec_of(c["to_month"])
+            held = round(src["expenses"].get(c["line"], 0.0), 2) if src else None
+            if src is None or dst is None or held != round(c["expect"], 2) or held < amt:
+                corrections_skipped.append({**c, "found": held})
+                continue
+            src["expenses"][c["line"]] = round(held - amt, 2)
+            dst["expenses"][c["line"]] = round(dst["expenses"].get(c["line"], 0.0) + amt, 2)
+            shift_totals(src, -amt)
+            shift_totals(dst, amt)
+            corrections.append({
+                "property": prop, "amount": amt, "kind": "month",
+                "what": f"{c['line']} — {money(amt)} moved from {c['from_month']} to {c['to_month']}",
+                "why": c["why"]})
+        else:
+            rec = rec_of(c["month"])
+            held = round(rec["expenses"].get(c["from_line"], 0.0), 2) if rec else None
+            if rec is None or held != round(c["expect"], 2) or held < amt:
+                corrections_skipped.append({**c, "found": held})
+                continue
+            rec["expenses"][c["from_line"]] = round(held - amt, 2)
+            rec["expenses"][c["to_line"]] = round(
+                rec["expenses"].get(c["to_line"], 0.0) + amt, 2)
+            # Same month, same total: nothing but the line detail moves.
+            corrections.append({
+                "property": prop, "amount": amt, "kind": "line",
+                "what": f"{c['month']} — {money(amt)} moved from {c['from_line']} "
+                        f"to {c['to_line']}",
+                "why": c["why"]})
+
     # Reclassify escrowed insurance out of debt service (see ESCROWED_INSURANCE).
     # Guarded on both sides: skipped where the Insurance line already carries a
     # figure (the CPA has started booking it, and adding would double-count) and
@@ -315,6 +400,8 @@ def parse(path):
         "groups": {g: sorted(v) for g, v in GROUPS.items()},
         "properties": data,
         "adjustments": adjustments,
+        "corrections": corrections,
+        "correctionsSkipped": corrections_skipped,
         "consolidated": consolidated,
     }
 

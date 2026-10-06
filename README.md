@@ -202,16 +202,19 @@ the default view. Its restated figures now carry the capex reserve when the rese
 on (`expensesRecordedAdj`); before that fix they were computed reserve-free against a
 reserve-bearing headline, which made counting an omitted expense appear to *raise* NOI.
 
-## The one place this report departs from the workbook
+## Where this report departs from the workbook
+
+Two declared tables at the top of `build/parse.py`, and nothing else. Both are
+disclosed on the page in a blue-bordered note — blue rather than amber, because a
+declared adjustment is not a defect — and repeated in the CSV export's header block.
+
+### Escrowed insurance
 
 Where a lender escrows the insurance premium inside the monthly loan payment, the
 workbook books nothing on the property's Insurance line and the whole payment on Debt
 Payments. The money is real and it is being spent on insurance, so leaving it there
 understates operating expense and overstates debt service by the same amount every
 month — flattering NOI and the margin, and distorting DSCR on both sides of the ratio.
-
-`build/parse.py` therefore reclassifies it, from a declared table at the top of the
-file:
 
 ```python
 ESCROWED_INSURANCE = {
@@ -224,16 +227,35 @@ line. **Cash flow after debt is unchanged** — the same dollars, counted one li
 up — while operating expenses rise, debt service falls, and NOI, margin and DSCR all
 move. Potomac's debt service reads $10,165.34 a month rather than $11,317.51.
 
-Two guards keep it from doing damage: a month whose Insurance line already carries a
-figure is skipped (the accountant has started booking it, and adding would
-double-count), as is any month whose debt payment is smaller than the premium. Months
-applied and skipped are both recorded in the payload.
+Two guards: a month whose Insurance line already carries a figure is skipped (the
+accountant has started booking it, and adding would double-count), as is any month whose
+debt payment is smaller than the premium.
 
-It is disclosed on the page rather than folded in silently — an **Escrowed insurance,
-reclassified** note appears above the table wherever an affected property is in the
-selection, blue-bordered rather than amber because a declared reclassification is not a
-defect, and the CSV export carries the same statement in its header block. To add
-another escrowed property, add it to that dictionary and rebuild.
+### Owner-directed corrections
+
+Individual cells the owner has identified as booked to the wrong month, or to the wrong
+line within a month. Each entry carries an `expect` — the value the source cell must
+currently hold. **If the accountant fixes it at source, the cell no longer matches, the
+correction stops firing, and the figure is not corrected twice.** Corrections that stop
+matching are reported in the payload under `correctionsSkipped` so they can be retired
+rather than silently rotting.
+
+Two shapes. `from_month`/`to_month` moves the same line between months: both months'
+expense totals, NOI and cash flow change, and the pair nets to zero across them.
+`from_line`/`to_line` moves within one month: the line detail and the expense-mix
+grouping change, no total moves. Either way the workbook's own subtotal and the
+recomputed figure move together, so `variance` stays exactly as the workbook reported it.
+
+Standing corrections, all 2727 Broadway:
+
+| Correction | Effect |
+|---|---|
+| `Trash` — $327.54 from Jun to Jul | The June charge was $655.08, double the run rate, with July at zero. Trash now reads a flat $327.54 across May–Jul. |
+| Jun — $215.00 from `Property Manager` to `Repairs & Maintenance` | Property management returns to its $171.53 run rate; June repairs become $365.00. |
+| Apr — $499.00 from `Accounting` to `Repairs & Maintenance` | Accounting returns to its $21.38 run rate; April repairs become $680.70. |
+
+Year-to-date portfolio totals are untouched by all three — only June and July move
+against each other, by $327.54.
 
 ## Layout
 
