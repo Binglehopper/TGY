@@ -220,6 +220,8 @@
     border-left:3px solid var(--warning); border-radius:10px; padding:14px 18px;
     font-size:12.5px; color:var(--text-secondary); margin-bottom:16px; }
   .note b { color:var(--text-primary); }
+  /* A declared reclassification is not a defect - it reads as information, not warning. */
+  .note.info { border-left-color:var(--series-1); }
   footer { color:var(--text-muted); font-size:12px; margin-top:22px; }
 </style>
 </head>
@@ -487,6 +489,10 @@ function seriesFor(name) {
   s.groups["Capex reserve"] = s.rent.map(r => r * RES_RATE);
   s.reserve = s.rent.map(r => r * RES_RATE);
   s.expensesAdj = s.expenses.map((v, i) => v + s.reserve[i]);
+  // The recomputed-from-line-items figure needs the same overlay, or the variance
+  // note restates NOI on a different basis from the headline it is correcting -
+  // which made counting an omitted expense look like it *improved* NOI.
+  s.expensesRecordedAdj = s.expensesRecorded.map((v, i) => v + s.reserve[i]);
   s.noiAdj = s.income.map((v, i) => v - s.expensesAdj[i]);
   s.cashflowAdj = s.noiAdj.map((v, i) => v - s.debt[i]);
   // arr() is what charts and totals read; raw() is always the workbook figure.
@@ -827,6 +833,16 @@ function buildCSV(s, title) {
   L.push(["Basis", ADJ
     ? `Accrual, with ${pctLabel()} applied as an operating expense. That reserve is an underwriting overlay, NOT a figure from the source workbook.`
     : "Accrual. Figures as reported in the source workbook."]);
+  const esc0 = (P.adjustments || []).filter(a => includedProps().includes(a.property));
+  if (esc0.length) {
+    const sel = new Set(s.selMonths());
+    esc0.forEach(a => {
+      const hit = a.months.filter(m => sel.has(m));
+      if (hit.length) L.push(["Reclassified", `${a.property}: ${money2(a.monthly)}/month of escrowed ` +
+        `insurance moved from debt service to the insurance line across ${hit.length} month(s), ` +
+        `${money2(a.monthly * hit.length)} in total. Cash flow after debt is unchanged; NOI and DSCR are not.`]);
+    });
+  }
   const variance = s.ytd("variance");
   if (Math.abs(variance) >= 1) {
     L.push(["Note", `The source workbook's expense subtotals omit an insurance amount recorded in the same column; ` +
@@ -924,6 +940,28 @@ const legendNC = () => `<div class="legend">
 const legendMix = () => `<div class="legend">` + activeGroups().map((g, i) =>
   `<span><i class="key" style="background:var(--${GROUP_VAR[i].slice(2)})"></i>${g}</span>`).join("") + `</div>`;
 
+function escrowNote(scope) {
+  const adj = (P.adjustments || []).filter(a => scope.includes(a.property));
+  if (!adj.length) return "";
+  const sel = new Set(MSEL ? P.months.slice(MSEL[0], MSEL[1] + 1) : P.months);
+  const parts = [];
+  for (const a of adj) {
+    const hit = a.months.filter(m => sel.has(m));
+    if (!hit.length) continue;
+    parts.push(`<b>${esc(a.property)}</b> — ${money2(a.monthly)} a month across ${hit.length}
+      month${hit.length === 1 ? "" : "s"}, ${money2(a.monthly * hit.length)} in total`);
+  }
+  if (!parts.length) return "";
+  return `<div class="note info"><b>Escrowed insurance, reclassified.</b>
+    The lender escrows these premiums inside the monthly loan payment, so the workbook books
+    them entirely under debt service and leaves the insurance line empty. This report moves
+    them to insurance: ${parts.join("; ")}. Operating expenses and insurance are that much
+    higher here than in the workbook, debt service that much lower, and <b>cash flow after
+    debt is unchanged</b> — the same dollars, counted one line higher up. NOI, the operating
+    margin and DSCR all move as a result. It is the only place this report departs from the
+    workbook's presentation.</div>`;
+}
+
 function varianceNote(s) {
   const v = s.ytd("variance");
   if (Math.abs(v) < 1) return "";
@@ -932,7 +970,7 @@ function varianceNote(s) {
   return `<div class="note"><b>A subtotal discrepancy in the source workbook.</b>
     The expense subtotal excludes an insurance amount that is recorded in the same column in
     <b>${bad.join(", ")}</b> — ${money2(v)} in total. Every figure here follows the workbook as reported.
-    Counting those amounts, operating expenses are <b>${money2(s.ytd("expensesRecorded"))}</b>,
+    Counting those amounts${ADJ ? ", on the same reserve basis as above," : ""} operating expenses are <b>${money2(s.ytd("expensesRecorded"))}</b>,
     NOI is <b>${money2(s.ytd("income") - s.ytd("expensesRecorded"))}</b> and cash flow after debt is
     <b>${money2(s.ytd("income") - s.ytd("expensesRecorded") - s.ytd("debt"))}</b>.</div>`;
 }
@@ -974,7 +1012,7 @@ function renderPortfolio() {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Portfolio cash flow after debt") + kpiTiles(s) +
-    varianceNote(s) +
+    varianceNote(s) + escrowNote(props) +
     `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
@@ -1006,7 +1044,7 @@ function renderProperty(name) {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Cash flow after debt") + kpiTiles(s) +
-    varianceNote(s) +
+    varianceNote(s) + escrowNote([name]) +
     `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, in dollars.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}

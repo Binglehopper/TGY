@@ -33,6 +33,27 @@ STRUCTURE = {
 }
 INCOME_ITEMS = {"rental income", "laundry", "interest income", "other income"}
 
+# ---------------------------------------------------------------------------
+# Escrowed insurance.
+#
+# Where the lender escrows the insurance premium inside the monthly loan payment,
+# the workbook books nothing on the property's Insurance line and the whole payment
+# on Debt Payments. The money is real and it is being spent on insurance, so leaving
+# it there understates operating expense and overstates debt service by the same
+# amount every month. That flatters NOI and the margin, and it distorts DSCR in both
+# the numerator and the denominator.
+#
+# Reclassifying moves the premium from Debt Payments to Insurance. It is the only
+# place this report departs from the workbook's own presentation, so it is declared
+# here as data, applied only where the Insurance line is genuinely empty, and
+# disclosed on the page rather than folded in silently. Cash flow after debt is
+# unchanged by it - the same dollars, counted one line higher up.
+# ---------------------------------------------------------------------------
+ESCROWED_INSURANCE = {
+    "Potomac": 1152.17,
+}
+
+
 # Canonical grouping for the expense-mix view.
 GROUPS = {
     "Taxes & insurance": {"property taxes", "insurance"},
@@ -238,6 +259,41 @@ def parse(path):
                 all_props.append(p)
     data = {p: [per_month[i].get(p) or blank() for i in range(n)] for p in all_props}
 
+    # Reclassify escrowed insurance out of debt service (see ESCROWED_INSURANCE).
+    # Guarded on both sides: skipped where the Insurance line already carries a
+    # figure (the CPA has started booking it, and adding would double-count) and
+    # where the debt payment is too small to contain the premium.
+    adjustments = []
+    for prop, monthly in ESCROWED_INSURANCE.items():
+        if prop not in data:
+            continue
+        applied, skipped = [], []
+        for i, rec in enumerate(data[prop]):
+            if rec.get("missing"):
+                continue
+            if round(rec["expenses"].get("Insurance", 0.0), 2) != 0.0:
+                skipped.append(months[i])
+                continue
+            if rec["debt"] < monthly:
+                skipped.append(months[i])
+                continue
+            rec["expenses"]["Insurance"] = round(
+                rec["expenses"].get("Insurance", 0.0) + monthly, 2)
+            rec["totalExpenses"] = round(rec["totalExpenses"] + monthly, 2)
+            rec["totalExpensesRecorded"] = round(rec["totalExpensesRecorded"] + monthly, 2)
+            rec["noi"] = round(rec["noi"] - monthly, 2)
+            rec["debt"] = round(rec["debt"] - monthly, 2)
+            # cashflow is unchanged by construction; recompute so it cannot drift.
+            rec["cashflow"] = round(rec["noi"] - rec["debt"], 2)
+            applied.append(months[i])
+        if applied:
+            adjustments.append({
+                "property": prop, "line": "Insurance", "from": "Debt payments",
+                "monthly": monthly, "months": applied, "skipped": skipped,
+                "total": round(monthly * len(applied), 2),
+            })
+
+
     # Year label from the report subtitle, e.g. "January 1-31, 2026"
     yr = None
     for row in (3, 2, 4):
@@ -258,6 +314,7 @@ def parse(path):
         "entities": entities,
         "groups": {g: sorted(v) for g, v in GROUPS.items()},
         "properties": data,
+        "adjustments": adjustments,
         "consolidated": consolidated,
     }
 

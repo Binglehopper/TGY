@@ -183,11 +183,57 @@ workbook's own figure and states the discrepancy rather than quietly picking one
 
 This is not hypothetical. Through mid-2026 the per-property expense subtotals omitted
 the insurance line in January, February and June — $12,224 portfolio-wide. That was
-fixed in August 2026 and variance has read 0.00 since. A later attempt at the same fix
-zeroed June's insurance across 15 of 17 properties *and* adjusted the subtotals to
-match, so the variance check read clean on data that was wrong. **Internal consistency
-is not correctness** — the refresh job now also checks that insurance holds its flat
-monthly pattern per property.
+fixed in the `07.` workbook in August 2026. A later attempt at the same fix zeroed
+June's insurance across 15 of 17 properties *and* adjusted the subtotals to match, so
+the variance check read clean on data that was wrong. **Internal consistency is not
+correctness** — the refresh job now also checks that insurance holds its flat monthly
+pattern per property.
+
+**The `08.` workbook regressed it.** The subtotal formulas in the January, February and
+June sheets are back to the hand-added form that skips the insurance cell —
+`=K23+K24+K25+K27+K28+K29` on `Total for Rental Expenses` in Jan and Feb (K26 is
+Insurance), `=K15+K16+K19+K20` on `Total for Administrative Expenses` in June (K18 is
+Insurance). The same $12,224.20. August's own sheet uses `=SUM(...)` ranges throughout
+and reads clean, which suggests `08.` was started from a pre-fix copy rather than from
+the corrected `07.`.
+
+Because the subtotal is what the report shows, the variance note is visible again in
+the default view. Its restated figures now carry the capex reserve when the reserve is
+on (`expensesRecordedAdj`); before that fix they were computed reserve-free against a
+reserve-bearing headline, which made counting an omitted expense appear to *raise* NOI.
+
+## The one place this report departs from the workbook
+
+Where a lender escrows the insurance premium inside the monthly loan payment, the
+workbook books nothing on the property's Insurance line and the whole payment on Debt
+Payments. The money is real and it is being spent on insurance, so leaving it there
+understates operating expense and overstates debt service by the same amount every
+month — flattering NOI and the margin, and distorting DSCR on both sides of the ratio.
+
+`build/parse.py` therefore reclassifies it, from a declared table at the top of the
+file:
+
+```python
+ESCROWED_INSURANCE = {
+    "Potomac": 1152.17,
+}
+```
+
+**Potomac, $1,152.17 a month.** The premium moves from debt service to the insurance
+line. **Cash flow after debt is unchanged** — the same dollars, counted one line higher
+up — while operating expenses rise, debt service falls, and NOI, margin and DSCR all
+move. Potomac's debt service reads $10,165.34 a month rather than $11,317.51.
+
+Two guards keep it from doing damage: a month whose Insurance line already carries a
+figure is skipped (the accountant has started booking it, and adding would
+double-count), as is any month whose debt payment is smaller than the premium. Months
+applied and skipped are both recorded in the payload.
+
+It is disclosed on the page rather than folded in silently — an **Escrowed insurance,
+reclassified** note appears above the table wherever an affected property is in the
+selection, blue-bordered rather than amber because a declared reclassification is not a
+defect, and the CSV export carries the same statement in its header block. To add
+another escrowed property, add it to that dictionary and rebuild.
 
 ## Layout
 
