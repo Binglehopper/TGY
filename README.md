@@ -205,8 +205,7 @@ reserve-bearing headline, which made counting an omitted expense appear to *rais
 ## Where this report departs from the workbook
 
 Two declared tables at the top of `build/parse.py`, and nothing else. Both are
-disclosed on the page in a blue-bordered note — blue rather than amber, because a
-declared adjustment is not a defect — and repeated in the CSV export's header block.
+disclosed in the data-notes strip (below) and repeated in the CSV export's header block.
 
 ### Escrowed insurance
 
@@ -256,6 +255,35 @@ Standing corrections, all 2727 Broadway:
 
 Year-to-date portfolio totals are untouched by all three — only June and July move
 against each other, by $327.54.
+
+## The data-notes strip
+
+Three things can need saying about the figures on screen: a subtotal discrepancy in the
+workbook, the escrow reclassification, and any owner-directed correction. All three used
+to be full-width cards between the headline tiles and the table — roughly 300px of
+chrome before the reader reached what they came for, for notes that apply to a handful
+of cells.
+
+They now fold into **one line at the foot of the Table view card**: a coloured dot per
+note, a count ("2 notes on this data"), and a caret. Clicking unfolds them in place.
+Amber dot for a workbook discrepancy, blue for a declared adjustment of ours.
+
+Three deliberate choices:
+
+- **The strip itself is always visible, not hover-only.** These notes change what the
+  numbers mean — the variance one says the expense figure on screen is understated by a
+  real amount — so a reader must be able to tell a note exists without discovering it.
+- **Print opens every note** (`@media print`), since a printed page has no click.
+- **The open/closed state survives a re-render**, so changing month or property does not
+  shut a panel the reader deliberately opened.
+
+Each note is scoped to what is actually on screen: by property (`scope`) and by selected
+month. Select August alone and the April and June corrections do not appear, because
+nothing they touch is in view. With no applicable notes the strip is absent entirely —
+no empty affordance. `notesStrip()` in `template.html` assembles whatever
+`varianceItem`, `escrowItem` and `correctionItem` return.
+
+The table card is collapsed on arrival, so on first load none of this is on screen.
 
 ## Layout
 

@@ -326,6 +326,7 @@ def parse(path):
             shift_totals(dst, amt)
             corrections.append({
                 "property": prop, "amount": amt, "kind": "month",
+                "months": [c["from_month"], c["to_month"]],
                 "what": f"{c['line']} — {money(amt)} moved from {c['from_month']} to {c['to_month']}",
                 "why": c["why"]})
         else:
@@ -340,6 +341,7 @@ def parse(path):
             # Same month, same total: nothing but the line detail moves.
             corrections.append({
                 "property": prop, "amount": amt, "kind": "line",
+                "months": [c["month"]],
                 "what": f"{c['month']} — {money(amt)} moved from {c['from_line']} "
                         f"to {c['to_line']}",
                 "why": c["why"]})

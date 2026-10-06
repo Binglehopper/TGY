@@ -225,6 +225,29 @@
   .note ul { margin:7px 0 9px; padding-left:18px; }
   .note li { margin:2px 0; }
   .note .corrprop { margin-top:10px; }
+
+  /* ---------- data notes, folded into the foot of the table card ----------
+     These notes change what the numbers mean, so they keep a permanent, printable
+     line on screen - the detail is one click away, not hover-only. */
+  .notesbar { margin-top:14px; padding-top:12px; border-top:1px solid var(--grid); }
+  .notestoggle { background:none; border:0; padding:0; font:inherit; font-size:12px;
+    color:var(--text-muted); cursor:pointer; display:inline-flex; align-items:center; gap:7px; }
+  .notestoggle:hover { color:var(--text-primary); }
+  .notestoggle:focus-visible { outline:2px solid var(--series-1); outline-offset:3px; border-radius:4px; }
+  .ndot { width:6px; height:6px; border-radius:50%; background:var(--warning); flex:none; }
+  .ndot.info { background:var(--series-1); }
+  .ncar { font-size:10px; }
+  .notesbody { display:none; margin-top:12px; font-size:12px; color:var(--text-secondary); }
+  .notesbody.open { display:block; }
+  .notesbody .nitem { padding:10px 0; border-top:1px solid var(--grid); }
+  .notesbody .nitem:first-child { border-top:0; padding-top:2px; }
+  .notesbody .nhd { color:var(--text-primary); font-weight:620; margin-bottom:3px;
+    display:flex; align-items:center; gap:7px; }
+  .notesbody ul { margin:6px 0 0; padding-left:18px; }
+  .notesbody li { margin:2px 0; }
+  .notesbody .nprop { margin-top:8px; font-weight:600; color:var(--text-primary); }
+  /* Printing has no click, so print every note open. */
+  @media print { .notesbody { display:block !important; } }
   footer { color:var(--text-muted); font-size:12px; margin-top:22px; }
 </style>
 </head>
@@ -792,7 +815,7 @@ function tableRows(s) {
   return rows;
 }
 
-function tableFor(s) {
+function tableFor(s, scope) {
   const rows = tableRows(s);
   const [a, b] = s.range();
   const totalCol = mFiltered() ? (s.nMonths() === 1 ? "Total" : "Period") : "YTD";
@@ -807,7 +830,8 @@ function tableFor(s) {
   return `<div class="tabletools">
       <button type="button" class="dlbtn" data-download="csv">&#8595; Download CSV</button>
     </div>
-    <div class="scroller"><table>${h}</tbody></table></div>`;
+    <div class="scroller"><table>${h}</tbody></table></div>
+    ${notesStrip(s, scope)}`;
 }
 
 /* ---------- CSV export ----------
@@ -846,7 +870,9 @@ function buildCSV(s, title) {
         `${money2(a.monthly * hit.length)} in total. Cash flow after debt is unchanged; NOI and DSCR are not.`]);
     });
   }
-  (P.corrections || []).filter(c => includedProps().includes(c.property)).forEach(c =>
+  const selM = new Set(s.selMonths());
+  (P.corrections || []).filter(c => includedProps().includes(c.property) &&
+      (!c.months || c.months.some(m => selM.has(m)))).forEach(c =>
     L.push(["Corrected", `${c.property}: ${c.what}. ${c.why} Applied here, not in the source workbook.`]));
   const variance = s.ytd("variance");
   if (Math.abs(variance) >= 1) {
@@ -945,28 +971,42 @@ const legendNC = () => `<div class="legend">
 const legendMix = () => `<div class="legend">` + activeGroups().map((g, i) =>
   `<span><i class="key" style="background:var(--${GROUP_VAR[i].slice(2)})"></i>${g}</span>`).join("") + `</div>`;
 
-function correctionNote(scope) {
-  const cs = (P.corrections || []).filter(c => scope.includes(c.property));
-  if (!cs.length) return "";
+/* ---------- data notes ----------
+   Each builder returns {kind, title, body} or null. notesStrip() folds whatever
+   applies into one quiet line at the foot of the table card, with the detail one
+   click away. They used to be full-width cards above the table; they are rare
+   enough that they did not earn that space, but they change what the numbers mean,
+   so the strip itself is always visible rather than hover-only, and print opens it. */
+
+function correctionItem(scope) {
+  // Only the corrections that touch a month the reader is actually looking at.
+  const sel = new Set(MSEL ? P.months.slice(MSEL[0], MSEL[1] + 1) : P.months);
+  const cs = (P.corrections || []).filter(c => scope.includes(c.property) &&
+    (!c.months || c.months.some(m => sel.has(m))));
+  if (!cs.length) return null;
   const byProp = {};
   cs.forEach(c => (byProp[c.property] = byProp[c.property] || []).push(c));
+  const multi = Object.keys(byProp).length > 1;
   const blocks = Object.keys(byProp).map(prop =>
-    `<div class="corrprop"><b>${esc(prop)}</b></div><ul>` + byProp[prop].map(c =>
-      `<li>${esc(c.what)} — ${esc(c.why)}</li>`).join("") + `</ul>`).join("");
+    (multi ? `<div class="nprop">${esc(prop)}</div>` : "") + "<ul>" + byProp[prop].map(c =>
+      `<li>${esc(c.what)} — ${esc(c.why)}</li>`).join("") + "</ul>").join("");
   const moves = cs.filter(c => c.kind === "month").length;
-  return `<div class="note info"><b>Owner-directed corrections to the source workbook.</b>
-    Individual charges the owner has identified as booked to the wrong month or the wrong
-    line. They are applied here but not in the workbook, so figures on this page differ
-    from it in these cells.${blocks}
-    ${moves ? "A charge moved between months changes both months' expense totals, NOI and cash flow, and the pair nets to zero across them. " : ""}A
-    charge moved between lines changes the line detail and the expense mix only; no total
-    moves. Each correction is tied to the value the cell currently holds and stops applying
-    once the workbook is corrected at source, so nothing is corrected twice.</div>`;
+  return {
+    kind: "info",
+    title: multi ? "Owner-directed corrections, applied here but not in the workbook"
+                 : `Owner-directed corrections to ${esc(Object.keys(byProp)[0])}, applied here but not in the workbook`,
+    body: `Individual charges the owner has identified as booked to the wrong month or the
+      wrong line, so figures on this page differ from the workbook in these cells.${blocks}
+      ${moves ? "A charge moved between months changes both months' expense totals, NOI and cash flow, and the pair nets to zero across them. " : ""}A
+      charge moved between lines changes the line detail and the expense mix only; no total
+      moves. Each correction is tied to the value the cell currently holds and stops applying
+      once the workbook is corrected at source, so nothing is corrected twice.`
+  };
 }
 
-function escrowNote(scope) {
+function escrowItem(scope) {
   const adj = (P.adjustments || []).filter(a => scope.includes(a.property));
-  if (!adj.length) return "";
+  if (!adj.length) return null;
   const sel = new Set(MSEL ? P.months.slice(MSEL[0], MSEL[1] + 1) : P.months);
   const parts = [];
   for (const a of adj) {
@@ -975,28 +1015,54 @@ function escrowNote(scope) {
     parts.push(`<b>${esc(a.property)}</b> — ${money2(a.monthly)} a month across ${hit.length}
       month${hit.length === 1 ? "" : "s"}, ${money2(a.monthly * hit.length)} in total`);
   }
-  if (!parts.length) return "";
-  return `<div class="note info"><b>Escrowed insurance, reclassified.</b>
-    The lender escrows these premiums inside the monthly loan payment, so the workbook books
-    them entirely under debt service and leaves the insurance line empty. This report moves
-    them to insurance: ${parts.join("; ")}. Operating expenses and insurance are that much
-    higher here than in the workbook, debt service that much lower, and <b>cash flow after
-    debt is unchanged</b> — the same dollars, counted one line higher up. NOI, the operating
-    margin and DSCR all move as a result. It is the only place this report departs from the
-    workbook's presentation.</div>`;
+  if (!parts.length) return null;
+  return {
+    kind: "info",
+    title: "Escrowed insurance, reclassified",
+    body: `The lender escrows these premiums inside the monthly loan payment, so the workbook
+      books them entirely under debt service and leaves the insurance line empty. This report
+      moves them to insurance: ${parts.join("; ")}. Operating expenses and insurance are that
+      much higher here than in the workbook, debt service that much lower, and <b>cash flow
+      after debt is unchanged</b> — the same dollars, counted one line higher up. NOI, the
+      operating margin and DSCR all move as a result.`
+  };
 }
 
-function varianceNote(s) {
+function varianceItem(s) {
   const v = s.ytd("variance");
-  if (Math.abs(v) < 1) return "";
+  if (Math.abs(v) < 1) return null;
   const [ra] = s.range();
   const bad = s.selMonths().filter((m, i) => Math.abs(s.variance[ra + i]) > 0.01);
-  return `<div class="note"><b>A subtotal discrepancy in the source workbook.</b>
-    The expense subtotal excludes an insurance amount that is recorded in the same column in
-    <b>${bad.join(", ")}</b> — ${money2(v)} in total. Every figure here follows the workbook as reported.
-    Counting those amounts${ADJ ? ", on the same reserve basis as above," : ""} operating expenses are <b>${money2(s.ytd("expensesRecorded"))}</b>,
-    NOI is <b>${money2(s.ytd("income") - s.ytd("expensesRecorded"))}</b> and cash flow after debt is
-    <b>${money2(s.ytd("income") - s.ytd("expensesRecorded") - s.ytd("debt"))}</b>.</div>`;
+  return {
+    kind: "warn",
+    title: "A subtotal discrepancy in the source workbook",
+    body: `The expense subtotal excludes an insurance amount that is recorded in the same
+      column in <b>${bad.join(", ")}</b> — ${money2(v)} in total. Every figure here follows the
+      workbook as reported. Counting those amounts${ADJ ? ", on the same reserve basis as above," : ""}
+      operating expenses are <b>${money2(s.ytd("expensesRecorded"))}</b>, NOI is
+      <b>${money2(s.ytd("income") - s.ytd("expensesRecorded"))}</b> and cash flow after debt is
+      <b>${money2(s.ytd("income") - s.ytd("expensesRecorded") - s.ytd("debt"))}</b>.`
+  };
+}
+
+/* The open/closed state survives a re-render - switching month or property should not
+   shut a panel the reader deliberately opened. */
+let NOTES_OPEN = false;
+
+function notesStrip(s, scope) {
+  const items = [varianceItem(s), escrowItem(scope), correctionItem(scope)].filter(Boolean);
+  if (!items.length) return "";
+  const dots = items.map(i => `<i class="ndot ${i.kind === "info" ? "info" : ""}"></i>`).join("");
+  const n = items.length;
+  return `<div class="notesbar">
+      <button type="button" class="notestoggle" data-notes aria-expanded="${NOTES_OPEN}" aria-controls="notesBody">
+        ${dots}<span>${n} note${n === 1 ? "" : "s"} on this data</span><span class="ncar">${NOTES_OPEN ? "▾" : "▸"}</span>
+      </button>
+    </div>
+    <div class="notesbody${NOTES_OPEN ? " open" : ""}" id="notesBody">` +
+    items.map(i => `<div class="nitem">
+        <div class="nhd"><i class="ndot ${i.kind === "info" ? "info" : ""}"></i>${i.title}</div>
+        ${i.body}</div>`).join("") + `</div>`;
 }
 
 function scopeLabel() {
@@ -1036,8 +1102,7 @@ function renderPortfolio() {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Portfolio cash flow after debt") + kpiTiles(s) +
-    varianceNote(s) + escrowNote(props) + correctionNote(props) +
-    `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s)}</details>` +
+    `<details class="tablewrap"><summary>Table view — ${isFiltered() ? esc(VIEW.label) : "portfolio"}, full monthly detail</summary>${tableFor(s, props)}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, ${scopeLabel()}.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
       ${chartCard(cashLabel(), `Monthly, ${scopeLabel()}.${monthNote()}`, legendNC(), "cNC", "0 0 520 300")}
@@ -1068,8 +1133,7 @@ function renderProperty(name) {
 
   document.getElementById("body").innerHTML =
     heroFor(s, "Cash flow after debt") + kpiTiles(s) +
-    varianceNote(s) + escrowNote([name]) + correctionNote([name]) +
-    `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s)}</details>` +
+    `<details class="tablewrap"><summary>Table view — full monthly detail</summary>${tableFor(s, [name])}</details>` +
     `<div class="grid2">
       ${chartCard("Income vs. operating expenses", `Monthly, in dollars.${monthNote()}`, LEGEND_IE, "cIE", "0 0 520 300")}
       ${chartCard(cashLabel(), `Monthly. Net operating income less mortgage payments${ADJ ? " and the capex reserve" : ""}.${monthNote()}`, legendNC(), "cNC", "0 0 520 300")}
@@ -1438,7 +1502,17 @@ function boot() {
   });
   $("body").addEventListener("click", e => {
     const btn = e.target.closest("[data-download]");
-    if (btn) downloadCSV(btn);
+    if (btn) { downloadCSV(btn); return; }
+    // composedPath, not closest() - a re-render mid-click can detach e.target.
+    const tog = e.composedPath().find(el => el.dataset && el.dataset.notes !== undefined);
+    if (tog) {
+      NOTES_OPEN = !NOTES_OPEN;
+      const body = $("notesBody");
+      if (body) body.classList.toggle("open", NOTES_OPEN);
+      tog.setAttribute("aria-expanded", String(NOTES_OPEN));
+      const car = tog.querySelector(".ncar");
+      if (car) car.textContent = NOTES_OPEN ? "\u25BE" : "\u25B8";
+    }
   });
   addEventListener("resize", hideTip);
   draw();
