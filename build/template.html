@@ -159,6 +159,8 @@
   .tick { fill:var(--text-muted); font-size:11px; font-variant-numeric:tabular-nums; }
   .xlab { fill:var(--text-secondary); font-size:11.5px; }
   .dlab { fill:var(--text-primary); font-size:11.5px; font-weight:600; }
+  /* Annotation ink, deliberately not the series colour - the hue belongs to the data. */
+  .alab { fill:var(--text-secondary); font-size:11px; font-weight:600; }
   .dim { opacity:0.2; }
   :root[data-theme="dark"] .dim { opacity:0.26; }
   .xlab.on { fill:var(--text-primary); font-weight:650; }
@@ -573,7 +575,8 @@ function chartIncomeExpense(svg, s) {
 
 function chartNoiCash(svg, s) {
   svg.innerHTML = "";
-  const W = 520, H = 300, m = { t: 20, r: 58, b: 34, l: 58 };
+  // r leaves room for two right-edge labels: the last value and "avg $x".
+  const W = 520, H = 300, m = { t: 20, r: 66, b: 34, l: 58 };
   const pw = W - m.l - m.r, ph = H - m.t - m.b;
   const arrOf = k => s.arr(k);
   const all = s.arr("cashflow").slice();
@@ -602,6 +605,18 @@ function chartNoiCash(svg, s) {
     el("path", { d: path(k, ra, rb), fill: "none", stroke: cssv(cv), "stroke-width": 2,
       "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
   });
+  /* Average for the period shown. Drawn in neutral ink, dashed: the series hue belongs
+     to the data, and an annotation wearing it reads as a second measurement. Dashing is
+     unambiguous because the gridlines are solid hairlines. The rule spans only the
+     selected months, so its scope is visible rather than merely stated. With one month
+     selected the average IS that month, so it is suppressed rather than restated. */
+  const sel = s.slice("cashflow");
+  const avg = sel.length ? sum(sel) / sel.length : 0;
+  const showAvg = sel.length > 1;
+  if (showAvg) {
+    el("line", { x1: x(ra), x2: x(rb), y1: y(avg), y2: y(avg), stroke: cssv("--text-secondary"),
+      "stroke-width": 1.5, "stroke-dasharray": "5 4", "stroke-linecap": "round" }, svg);
+  }
   ser.forEach(([k, cv]) => arrOf(k).forEach((v, i) => {
     const on = i >= ra && i <= rb;
     el("circle", { cx: x(i), cy: y(v), r: on ? 4 : 3, fill: cssv(cv),
@@ -612,6 +627,13 @@ function chartNoiCash(svg, s) {
   for (let i = 1; i < labs.length; i++)
     if (labs[i].yy - labs[i - 1].yy < 13) labs[i].yy = labs[i - 1].yy + 13;
   labs.forEach(L => el("text", { x: x(rb) + 10, y: L.yy + 4, class: "dlab" }, svg).textContent = compact(L.v));
+  if (showAvg) {
+    // Keep the average label clear of the end-of-series label it sits beside.
+    const endY = labs.length ? labs[labs.length - 1].yy + 4 : y(arrOf("cashflow")[rb]) + 4;
+    let ly = y(avg) + 4;
+    if (Math.abs(ly - endY) < 14) ly = endY + (y(avg) > endY ? 14 : -14);
+    el("text", { x: x(rb) + 10, y: ly, class: "alab" }, svg).textContent = "avg " + compact(avg);
+  }
   s.months.forEach((mo, i) => {
     const bw = pw / (s.months.length - 1);
     const hit = el("rect", { x: Math.max(m.l - 4, x(i) - bw / 2), y: m.t - 10, width: bw, height: ph + 20, fill: "transparent", style: "cursor:crosshair" }, svg);
@@ -990,17 +1012,27 @@ function correctionItem(scope) {
   const blocks = Object.keys(byProp).map(prop =>
     (multi ? `<div class="nprop">${esc(prop)}</div>` : "") + "<ul>" + byProp[prop].map(c =>
       `<li>${esc(c.what)} — ${esc(c.why)}</li>`).join("") + "</ul>").join("");
-  const moves = cs.filter(c => c.kind === "month").length;
+  // Each shape moves a different set of figures - say only what is true of the
+  // corrections actually in view.
+  const has = f => cs.some(f);
+  const rules = [];
+  if (has(c => c.kind === "month" && c.field !== "debt"))
+    rules.push(`An expense moved between months changes both months' expense totals, NOI and
+      cash flow, and the pair nets to zero across them.`);
+  if (has(c => c.kind === "month" && c.field === "debt"))
+    rules.push(`A debt payment moved between months changes both months' cash flow but not
+      operating expenses or NOI.`);
+  if (has(c => c.kind === "line"))
+    rules.push(`A charge moved between lines changes the line detail and the expense mix
+      only; no total moves.`);
   return {
     kind: "info",
     title: multi ? "Owner-directed corrections, applied here but not in the workbook"
                  : `Owner-directed corrections to ${esc(Object.keys(byProp)[0])}, applied here but not in the workbook`,
     body: `Individual charges the owner has identified as booked to the wrong month or the
       wrong line, so figures on this page differ from the workbook in these cells.${blocks}
-      ${moves ? "A charge moved between months changes both months' expense totals, NOI and cash flow, and the pair nets to zero across them. " : ""}A
-      charge moved between lines changes the line detail and the expense mix only; no total
-      moves. Each correction is tied to the value the cell currently holds and stops applying
-      once the workbook is corrected at source, so nothing is corrected twice.`
+      ${rules.join(" ")} Each correction is tied to the value the cell currently holds and
+      stops applying once the workbook is corrected at source, so nothing is corrected twice.`
   };
 }
 

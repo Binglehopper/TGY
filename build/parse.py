@@ -66,7 +66,9 @@ ESCROWED_INSURANCE = {
 #
 # Two shapes:
 #   from_month / to_month - the same line, moved between months. Changes both
-#       months' expense totals, NOI and cash flow; the pair nets to zero.
+#       months' expense totals, NOI and cash flow; the pair nets to zero. Add
+#       "on": "debt" to move a debt-service payment instead of an expense line -
+#       that leaves operating expenses and NOI alone and shifts only cash flow.
 #   from_line / to_line   - the same month, moved between lines. Changes the line
 #       detail and the expense-mix grouping only; no total moves.
 # ---------------------------------------------------------------------------
@@ -83,6 +85,13 @@ CORRECTIONS = [
      "from_line": "Accounting", "to_line": "Repairs & Maintenance", "expect": 520.38,
      "why": "Repair work booked to accounting. The residual is the property's "
             "$21.38 monthly run rate."},
+    {"property": "1114 Arkansas", "on": "debt", "line": "Debt service", "amount": 1703.09,
+     "from_month": "Mar", "to_month": "Feb", "expect": 3406.18,
+     "why": "February's payment is booked at zero and March carries two; both months "
+            "are the property's $1,703.09 run rate."},
+    {"property": "1114 Arkansas", "line": "Gas", "amount": 1139.69,
+     "from_month": "Mar", "to_month": "Feb", "expect": 1538.81,
+     "why": "February's gas is booked at zero and March carries both months."},
 ]
 
 
@@ -316,16 +325,27 @@ def parse(path):
         amt = round(c["amount"], 2)
         if "from_month" in c:
             src, dst = rec_of(c["from_month"]), rec_of(c["to_month"])
-            held = round(src["expenses"].get(c["line"], 0.0), 2) if src else None
+            on_debt = c.get("on") == "debt"
+            # Debt service is its own field, not an expense line, so a move on it
+            # leaves operating expenses and NOI alone and only shifts cash flow.
+            held = (round(src["debt"], 2) if on_debt
+                    else round(src["expenses"].get(c["line"], 0.0), 2)) if src else None
             if src is None or dst is None or held != round(c["expect"], 2) or held < amt:
                 corrections_skipped.append({**c, "found": held})
                 continue
-            src["expenses"][c["line"]] = round(held - amt, 2)
-            dst["expenses"][c["line"]] = round(dst["expenses"].get(c["line"], 0.0) + amt, 2)
-            shift_totals(src, -amt)
-            shift_totals(dst, amt)
+            if on_debt:
+                src["debt"] = round(held - amt, 2)
+                dst["debt"] = round(dst["debt"] + amt, 2)
+                for r in (src, dst):
+                    r["cashflow"] = round(r["noi"] - r["debt"], 2)
+            else:
+                src["expenses"][c["line"]] = round(held - amt, 2)
+                dst["expenses"][c["line"]] = round(dst["expenses"].get(c["line"], 0.0) + amt, 2)
+                shift_totals(src, -amt)
+                shift_totals(dst, amt)
             corrections.append({
                 "property": prop, "amount": amt, "kind": "month",
+                "field": "debt" if on_debt else "expense",
                 "months": [c["from_month"], c["to_month"]],
                 "what": f"{c['line']} — {money(amt)} moved from {c['from_month']} to {c['to_month']}",
                 "why": c["why"]})

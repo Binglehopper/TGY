@@ -42,6 +42,23 @@ property ranking, table, CSV — covers only the months you picked. The trend ch
 keep the whole year on screen with unselected months dimmed, because a single
 month's figure is hard to judge without seeing what the other months looked like.
 
+### The average on the cash-flow chart
+
+The cash-flow chart carries a dashed rule at the **average month for the period shown**,
+labelled `avg $x` at the right edge. The figure is also the hero's third side stat; the
+rule earns its place by showing something the stat cannot — which months cleared the
+average and which fell short.
+
+Three details. The rule **spans only the selected months**, so its scope is visible
+rather than merely stated. It is drawn in **neutral ink, dashed** rather than the series
+hue: the colour belongs to the data, and an annotation wearing it reads as a second
+measurement — dashing is unambiguous because the gridlines are solid hairlines. And with
+**one month selected it is suppressed entirely**, because the average of one month is
+that month, and a rule through the only data point restates it.
+
+The right-hand margin (`m.r`) is sized for two labels, and the average label steps 14px
+clear of the end-of-series label when the two would collide.
+
 ### Capex reserve
 
 A toggle above the report applies a **4% capex reserve on rent**, treated as an
@@ -240,21 +257,33 @@ matching are reported in the payload under `correctionsSkipped` so they can be r
 rather than silently rotting.
 
 Two shapes. `from_month`/`to_month` moves the same line between months: both months'
-expense totals, NOI and cash flow change, and the pair nets to zero across them.
-`from_line`/`to_line` moves within one month: the line detail and the expense-mix
-grouping change, no total moves. Either way the workbook's own subtotal and the
-recomputed figure move together, so `variance` stays exactly as the workbook reported it.
+expense totals, NOI and cash flow change, and the pair nets to zero across them. Add
+`"on": "debt"` and it moves a **debt-service payment** instead of an expense line, which
+leaves operating expenses and NOI alone and shifts only cash flow. `from_line`/`to_line`
+moves within one month: the line detail and the expense-mix grouping change, no total
+moves. In every case the workbook's own subtotal and the recomputed figure move
+together, so `variance` stays exactly as the workbook reported it — and the note on the
+page states only the rules that apply to the corrections actually in view.
 
-Standing corrections, all 2727 Broadway:
+Standing corrections:
 
-| Correction | Effect |
-|---|---|
-| `Trash` — $327.54 from Jun to Jul | The June charge was $655.08, double the run rate, with July at zero. Trash now reads a flat $327.54 across May–Jul. |
-| Jun — $215.00 from `Property Manager` to `Repairs & Maintenance` | Property management returns to its $171.53 run rate; June repairs become $365.00. |
-| Apr — $499.00 from `Accounting` to `Repairs & Maintenance` | Accounting returns to its $21.38 run rate; April repairs become $680.70. |
+| Property | Correction | Effect |
+|---|---|---|
+| 2727 Broadway | `Trash` — $327.54 from Jun to Jul | The June charge was $655.08, double the run rate, with July at zero. Trash now reads a flat $327.54 across May–Jul. |
+| 2727 Broadway | Jun — $215.00 from `Property Manager` to `Repairs & Maintenance` | Property management returns to its $171.53 run rate; June repairs become $365.00. |
+| 2727 Broadway | Apr — $499.00 from `Accounting` to `Repairs & Maintenance` | Accounting returns to its $21.38 run rate; April repairs become $680.70. |
+| 1114 Arkansas | `Debt service` — $1,703.09 from Mar to Feb (`on: debt`) | February was booked at zero and March carried two payments. Debt service now reads a flat $1,703.09 all year. |
+| 1114 Arkansas | `Gas` — $1,139.69 from Mar to Feb | February was booked at zero and March carried $1,538.81 for both months. Feb becomes $1,139.69, Mar $399.12. |
 
-Year-to-date portfolio totals are untouched by all three — only June and July move
-against each other, by $327.54.
+Year-to-date portfolio totals are untouched by all five — only the paired months move
+against each other.
+
+**A correction whose two figures do not sum to what the workbook holds is not a
+correction.** The gas pair was first given as $1,139.69 / $339.12, which is $60.00 short
+of the $1,538.81 in the workbook; $399.12 was the intended figure. Check the arithmetic
+before adding an entry — a move that silently changes a total is a write-off wearing a
+reclassification's clothes, and the `expect` guard will not catch it because the source
+cell still matches.
 
 ## The data-notes strip
 
